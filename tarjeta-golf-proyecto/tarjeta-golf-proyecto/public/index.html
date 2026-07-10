@@ -190,6 +190,35 @@
   .totbar .tk { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; }
   .totbar .tv { font-size: 19px; font-weight: 800; letter-spacing: -.02em; margin-top: 1px; }
 
+  /* Visor del hoyo (satélite) */
+  #holeView { position: relative; z-index: 0; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--line); }
+  #holeMap { width: 100%; height: 52vh; min-height: 300px; background: #2a3b30; z-index: 0; }
+  .hv-info {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 400; pointer-events: none;
+    display: flex; align-items: baseline; gap: 12px; padding: 22px 16px 12px;
+    background: linear-gradient(to top, rgba(6,18,12,.82), rgba(6,18,12,0));
+  }
+  .hv-info #hvTitle { color: #fff; font-weight: 900; font-size: 20px; letter-spacing: -.02em; text-shadow: 0 1px 6px rgba(0,0,0,.5); }
+  .hv-dist { margin-left: auto; color: #fff; font-weight: 800; font-size: 17px; letter-spacing: -.01em;
+    background: rgba(12,20,16,.55); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+    padding: 5px 12px; border-radius: 999px; text-shadow: 0 1px 4px rgba(0,0,0,.4); }
+  .hv-dist:empty { display: none; }
+
+  /* Hoja de resultados (sube sola al cambiar de hoyo) */
+  .sheet-bg { position: fixed; inset: 0; z-index: 45; background: rgba(8,16,12,.35);
+    display: grid; align-items: end; justify-items: center; opacity: 0; transition: opacity .2s; }
+  .sheet-bg.show { opacity: 1; }
+  .sheet {
+    width: 100%; max-width: 720px; background: var(--surface); border-radius: 22px 22px 0 0;
+    box-shadow: 0 -12px 40px rgba(0,0,0,.32); padding: 8px 4px calc(14px + env(safe-area-inset-bottom));
+    transform: translateY(100%); transition: transform .24s cubic-bezier(.2,.8,.2,1);
+    max-height: 88vh; overflow-y: auto;
+  }
+  .sheet-bg.show .sheet { transform: translateY(0); }
+  .sheet-grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line-strong); margin: 6px auto 2px; }
+  .sheet .hole { border: 0; box-shadow: none; margin: 0; }
+  .sheet-confirm { width: calc(100% - 28px); margin: 4px 14px 0; padding: 15px; }
+
   .hole {
     background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
     box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden;
@@ -556,7 +585,11 @@
     <div><div class="tk">Calles</div><div class="tv tnum" id="tFir">0%</div></div>
     <div><div class="tk">Greens</div><div class="tv tnum" id="tGir">0%</div></div>
   </div>
-  <div id="holes"></div>
+  <div id="holeView">
+    <div id="holeMap"></div>
+    <div class="hv-info"><span id="hvTitle">Hoyo 1</span><span id="hvDist" class="hv-dist"></span></div>
+  </div>
+  <div id="holes" class="hidden"></div>
 </main>
 
 <button class="map-fab hidden" id="mapFab">
@@ -600,6 +633,10 @@
     <button class="rb-nav" id="holeNext" aria-label="Hoyo siguiente">›</button>
     <button class="rb-side save" id="btnFinish">Guardar</button>
   </div>
+</div>
+
+<div class="sheet-bg hidden" id="scoreSheetBg">
+  <div class="sheet" id="scoreSheet"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1659,6 +1696,7 @@ function startRound(course, opts) {
   const si = course.si ? course.si.slice(from, to) : null;
   active = {
     id: uid(), courseId: course.id, courseName: course.name, courseLoc: course.loc,
+    lat: course.lat != null ? course.lat : null, lon: course.lon != null ? course.lon : null,
     pars, si, date: new Date().toISOString(),
     holeStart: from + 1, // nº del primer hoyo (para numerar 10-18 correctamente)
     mode: opts.mode || 'medal',
@@ -1688,28 +1726,34 @@ function openRound() {
   // Empezar en el primer hoyo sin apuntar (para retomar una ronda en curso donde se dejó)
   curHole = active.holes.findIndex(h => !h.strokes);
   if (curHole < 0) curHole = active.holes.length - 1;
+  holeGeom = null;
   renderHoles();
+  loadHoleGeom();
+  openScoreSheet();
   window.scrollTo(0, 0);
 }
 function closeRound(toTab) {
+  $('#scoreSheetBg').classList.add('hidden');
+  $('#scoreSheetBg').classList.remove('show');
   $('#viewRound').classList.add('hidden');
   $('#roundBar').classList.add('hidden');
   showTab(toTab || curTab);
 }
 
-// Un solo hoyo en pantalla (el que se está jugando). La barra inferior navega entre hoyos.
-let curHole = 0;
+// Un hoyo a la vez: la zona principal muestra el hoyo en satélite; la hoja de resultados
+// sube sola al cambiar de hoyo. La barra inferior navega entre hoyos.
+let curHole = 0, holeMap = null, holeGeoLayer = null, holeGeom = null;
+
 function renderHoles() {
-  const box = $('#holes'); box.innerHTML = '';
   curHole = Math.max(0, Math.min(curHole, active.holes.length - 1));
-  box.appendChild(holeCard(active.holes[curHole], curHole));
+  showHoleMap();
   updateHoleNav();
   updateTotals();
 }
 function goHole(d) {
   curHole = Math.max(0, Math.min(active.holes.length - 1, curHole + d));
   renderHoles();
-  window.scrollTo(0, 0);
+  openScoreSheet(); // al cambiar de hoyo, pedir los resultados
 }
 function updateHoleNav() {
   const n = active.holes.length;
@@ -1721,6 +1765,96 @@ function updateHoleNav() {
   $('#holePrev').disabled = curHole === 0;
   $('#holeNext').disabled = curHole === n - 1;
 }
+
+/* ---- Visor satélite del hoyo (imágenes Esri, gratis) + trazado real desde OSM ---- */
+function courseCoords() {
+  if (active && active.lat != null) return { lat: active.lat, lon: active.lon };
+  const c = GOLF_CATALOG.find(x => x.n === (active && active.courseName));
+  return c && c.lat != null ? { lat: c.lat, lon: c.lon } : null;
+}
+function ensureHoleMap() {
+  if (holeMap) return;
+  holeMap = L.map('holeMap', { zoomControl: false, attributionControl: false, scrollWheelZoom: false, tap: true }).setView([40.2, -3.7], 15);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles &copy; Esri' }).addTo(holeMap);
+  holeGeoLayer = L.layerGroup().addTo(holeMap);
+}
+function holeMeters(g) {
+  let m = 0;
+  for (let i = 1; i < g.length; i++) m += haversineKm(g[i-1][0], g[i-1][1], g[i][0], g[i][1]) * 1000;
+  return m;
+}
+function showHoleMap() {
+  const num = (active.holeStart || 1) + curHole;
+  $('#hvTitle').textContent = 'Hoyo ' + num;
+  ensureHoleMap();
+  holeGeoLayer.clearLayers();
+  const g = holeGeom && holeGeom[num];
+  setTimeout(() => { if (holeMap) holeMap.invalidateSize(); }, 30);
+  if (g && g.length >= 2) {
+    const line = L.polyline(g, { color: '#fff', weight: 4, opacity: .95 }).addTo(holeGeoLayer);
+    L.circleMarker(g[0], { radius: 6, color: '#fff', weight: 2, fillColor: '#5b5be6', fillOpacity: 1 }).addTo(holeGeoLayer);        // tee
+    L.circleMarker(g[g.length-1], { radius: 7, color: '#fff', weight: 2, fillColor: '#e6483d', fillOpacity: 1 }).addTo(holeGeoLayer); // green
+    setTimeout(() => { holeMap.invalidateSize(); holeMap.fitBounds(line.getBounds().pad(0.45)); }, 45);
+    $('#hvDist').textContent = Math.round(holeMeters(g)) + ' m';
+  } else {
+    const c = courseCoords();
+    if (c) holeMap.setView([c.lat, c.lon], 16);
+    $('#hvDist').textContent = '';
+  }
+}
+// Descarga (una vez por campo, cacheada) el trazado de cada hoyo desde OpenStreetMap.
+function loadHoleGeom() {
+  holeGeom = null;
+  const c = courseCoords(); if (!c) return;
+  const key = 'golf_hg_' + (active.courseName || '').replace(/[^\w]+/g, '_');
+  const cached = load(key, null);
+  if (cached && Object.keys(cached).length) { holeGeom = cached; showHoleMap(); return; }
+  const d = 0.02;
+  const q = '[out:json][timeout:25];way["golf"="hole"](' + (c.lat-d) + ',' + (c.lon-d) + ',' + (c.lat+d) + ',' + (c.lon+d) + ');out tags geom;';
+  const eps = ['https://overpass-api.de/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+  (async () => {
+    for (const ep of eps) {
+      try {
+        const r = await fetch(ep, { method: 'POST', body: q });
+        if (!r.ok) continue;
+        const j = await r.json();
+        const g = {};
+        (j.elements || []).forEach(w => {
+          if (w.type === 'way' && w.tags && w.tags.ref && w.geometry) {
+            const ref = parseInt(w.tags.ref, 10);
+            if (ref) g[ref] = w.geometry.map(p => [p.lat, p.lon]);
+          }
+        });
+        if (Object.keys(g).length) {
+          holeGeom = g;
+          try { localStorage.setItem(key, JSON.stringify(g)); } catch (e) {}
+          showHoleMap();
+          return;
+        }
+      } catch (e) { /* sin conexión / OSM ocupado → se queda el satélite del campo */ }
+    }
+  })();
+}
+
+/* ---- Hoja de resultados (sube sola al cambiar de hoyo) ---- */
+function openScoreSheet() {
+  const sheet = $('#scoreSheet');
+  sheet.innerHTML = '';
+  sheet.appendChild(el('div', 'sheet-grab'));
+  sheet.appendChild(holeCard(active.holes[curHole], curHole));
+  const btn = el('button', 'btn sheet-confirm', 'Confirmar');
+  btn.onclick = closeScoreSheet;
+  sheet.appendChild(btn);
+  const bg = $('#scoreSheetBg');
+  bg.classList.remove('hidden');
+  requestAnimationFrame(() => bg.classList.add('show'));
+}
+function closeScoreSheet() {
+  const bg = $('#scoreSheetBg');
+  bg.classList.remove('show');
+  setTimeout(() => bg.classList.add('hidden'), 220);
+}
+$('#scoreSheetBg').onclick = e => { if (e.target === $('#scoreSheetBg')) closeScoreSheet(); };
 
 function holeCard(h, i) {
   const par = active.pars[i];
@@ -1855,6 +1989,7 @@ $('#btnBackRound').onclick = () => {
 };
 $('#holePrev').onclick = () => goHole(-1);
 $('#holeNext').onclick = () => goHole(1);
+document.querySelector('.rb-hole').onclick = openScoreSheet; // tocar el hoyo reabre la hoja
 
 /* ---------- Course modal ---------- */
 function openCourseModal(course, prefill) {
