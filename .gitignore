@@ -1,0 +1,17 @@
+# Basura de macOS
+.DS_Store
+
+# Copias comprimidas
+*.zip
+
+# Caché de Firebase (se regenera sola)
+.firebase/
+
+# Copias de seguridad y versiones antiguas
+*.bak
+backups/
+*.pre-reubica
+*.pre-fixparhoyos
+
+# Ajustes locales de Claude Code
+.claude/
