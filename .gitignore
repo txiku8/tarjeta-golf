@@ -10,8 +10,7 @@
 # Copias de seguridad y versiones antiguas
 *.bak
 backups/
-*.pre-reubica
-*.pre-fixparhoyos
+*.pre-*
 
 # Ajustes locales de Claude Code
 .claude/

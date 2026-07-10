@@ -244,6 +244,22 @@
     border-top: 1px solid var(--line); padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
   }
   .bottombar-in { max-width: 720px; margin: 0 auto; display: flex; gap: 10px; }
+
+  /* Barra de ronda: navegador de hoyos (estilo HOLE19) + Salir/Guardar */
+  .roundbar-in { max-width: 720px; margin: 0 auto; display: flex; align-items: center; gap: 8px; }
+  .rb-side { flex: none; border: 0; border-radius: 11px; padding: 11px 12px; font-weight: 800; font-size: 13px; letter-spacing: -.01em; }
+  #btnBackRound.rb-side { background: var(--surface); color: var(--text); border: 1px solid var(--line-strong); }
+  .rb-side.save { background: var(--indigo); color: #fff; }
+  .rb-side:active { transform: scale(.97); }
+  .rb-nav { flex: none; width: 40px; height: 46px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--indigo); font-size: 26px; font-weight: 800; line-height: 1; display: grid; place-items: center; }
+  .rb-nav:active { background: var(--surface-2); }
+  .rb-nav:disabled { opacity: .3; }
+  .rb-hole { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 9px; }
+  .rb-flag { width: 20px; height: 24px; flex: none; color: var(--indigo); }
+  .rb-no { font-size: 30px; font-weight: 900; letter-spacing: -.03em; line-height: 1; }
+  .rb-meta { display: flex; flex-direction: column; gap: 1px; line-height: 1.2; }
+  .rb-meta span { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+  .rb-meta b { color: var(--text); font-weight: 800; font-size: 13px; }
   .btn {
     flex: 1; border: 0; border-radius: 12px; padding: 15px; font-weight: 800; font-size: 16px; letter-spacing: -.01em;
     background: var(--indigo); color: #fff;
@@ -570,9 +586,19 @@
 </nav>
 
 <div class="bottombar hidden" id="roundBar">
-  <div class="bottombar-in">
-    <button class="btn ghost" id="btnBackRound">‹ Salir</button>
-    <button class="btn" id="btnFinish">Guardar ronda</button>
+  <div class="roundbar-in">
+    <button class="rb-side" id="btnBackRound">Salir</button>
+    <button class="rb-nav" id="holePrev" aria-label="Hoyo anterior">‹</button>
+    <div class="rb-hole">
+      <svg class="rb-flag" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M6 4h11l-2.5 3.5L17 11H6z" fill="currentColor"/></svg>
+      <span class="rb-no tnum" id="navHoleNo">1</span>
+      <div class="rb-meta">
+        <span class="rb-par">Par <b id="navHolePar">4</b></span>
+        <span class="rb-si">S.I. <b id="navHoleSi">3</b></span>
+      </div>
+    </div>
+    <button class="rb-nav" id="holeNext" aria-label="Hoyo siguiente">›</button>
+    <button class="rb-side save" id="btnFinish">Guardar</button>
   </div>
 </div>
 
@@ -650,7 +676,7 @@ const GOLF_CATALOG = [
 ["ALTEA CLUB DE GOLF","Altea la Vella","Alicante",18,72,38.63172,-0.03422,[4,3,4,3,5,4,4,5,4,4,3,5,4,5,3,4,4,4],[16,14,2,6,4,18,10,8,12,15,9,7,17,1,5,13,3,11],[["Amarillas Caballeros",127,70.1],["Rojas Señoras",132,72.2],["Rojas Caballeros",118,66.6]]],
 ["BALNEARIO DE COFRENTES CLUB DE GOLF","Cofrentes","Valencia",18,54,39.22999,-1.06194,[3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3],[17,5,7,11,15,3,13,9,1,18,6,8,12,16,4,14,10,2],[["Verdes Señoras",61,51.2],["Verdes Caballeros",55,50.1]]],
 ["CAMPO DE GOLF EL SALER","Valencia","Valencia",18,72,39.31885,-0.30217,[4,4,5,3,5,4,4,4,3,4,5,3,4,4,5,4,3,4],[8,14,4,16,2,6,12,10,18,11,3,17,13,9,1,5,15,7],[["Blancas Caballeros",136,74.2],["Amarillas Caballeros",133,72.7],["Azules Señoras",141,76.8],["Azules Caballeros",129,69.5],["Rojas Señoras",138,74.3],["Rojas Caballeros",123,67.8]]],
-["CAMPO DE GOLF LA GALIANA","Barraca D Aigues Vives","Valencia",18,72,38.02743,-0.74345,[4,4,3,5,3,5,4,4,4,5,4,4,4,3,4,3,4,5],[13,3,17,1,15,5,11,9,7,4,6,10,14,18,12,8,16,2],[["Blancas Caballeros",148,74.1],["Amarillas Caballeros",143,72.3],["Azules Señoras",139,75.5],["Azules Caballeros",132,69.6],["Rojas Señoras",134,73],["Rojas Caballeros",126,67]]],
+["CAMPO DE GOLF LA GALIANA","Barraca D Aigues Vives","Valencia",18,72,39.08142,-0.35716,[4,4,3,5,3,5,4,4,4,5,4,4,4,3,4,3,4,5],[13,3,17,1,15,5,11,9,7,4,6,10,14,18,12,8,16,2],[["Blancas Caballeros",148,74.1],["Amarillas Caballeros",143,72.3],["Azules Señoras",139,75.5],["Azules Caballeros",132,69.6],["Rojas Señoras",134,73],["Rojas Caballeros",126,67]]],
 ["CAMPO DE GOLF LAS RAMBLAS DE CAMPOAMOR","Orihuela-Costa","Alicante",18,72,37.92963,-0.77825,[4,4,5,5,4,3,4,4,4,3,4,3,5,3,4,4,4,5],[8,10,4,2,16,18,6,14,12,5,7,9,13,17,15,3,1,11],[["Blancas Caballeros",137,72.2],["Amarillas Caballeros",136,71.8],["Azules Señoras",143,75.3],["Azules Caballeros",131,69.5],["Rojas Señoras",139,72.4],["Rojas Caballeros",125,66.4]]],
 ["CAMPO DE GOLF LO ROMERO","Pilar de la Horadada","Alicante",18,72,37.88643,-0.8299,[4,5,4,4,3,5,3,4,4,5,4,3,4,4,3,4,5,4],[8,2,6,18,10,14,12,4,16,5,17,7,11,15,13,3,9,1],[["Blancas Caballeros",138,72.5],["Amarillas Caballeros",136,71.7],["Azules Señoras",137,76],["Azules Caballeros",127,69.6],["Rojas Señoras",133,73.5],["Rojas Caballeros",132,68.4]]],
 ["CAMPO DE GOLF OLIVA-NOVA","Oliva","Valencia",18,72,38.89392,-0.05837,[5,4,3,4,4,3,4,5,4,4,3,4,4,5,4,3,5,4],[7,13,15,9,17,3,5,11,1,4,12,6,8,16,2,18,10,14],[["Blancas Caballeros",135,74],["Amarillas Caballeros",131,72.7],["Azules Señoras",130,74.8],["Azules Caballeros",121,69.2],["Rojas Señoras",127,73.4],["Rojas Caballeros",119,67.7]]],
@@ -676,7 +702,7 @@ const GOLF_CATALOG = [
 ["MELIÁ VILLAITANA GOLF","Benidorm","Alicante",18,62,38.55416,-0.15078,[4,3,4,3,4,4,3,3,3,4,3,3,4,3,3,3,4,4],[9,5,11,7,13,15,17,3,1,4,12,6,8,2,18,10,14,16],[["Blancas Caballeros",109,61.8],["Amarillas Caballeros",105,60.3],["Azules Señoras",104,60.9],["Azules Caballeros",129,67.8],["Rojas Señoras",89,58.1],["Rojas Caballeros",64,56.3],["Negras Caballeros",133,75.6]]],
 ["PANORAMICA GOLF, SPORTS & RESORT","San Jorge","Castellón",18,72,40.50875,0.33135,[4,5,3,5,3,4,3,4,5,4,5,3,4,4,4,3,4,5],[10,14,18,4,16,6,12,8,2,1,5,11,17,7,3,15,13,9],[["Blancas Caballeros",136,74],["Amarillas Caballeros",132,72],["Azules Señoras",137,75.4],["Azules Caballeros",123,68.7],["Rojas Señoras",131,72.2],["Rojas Caballeros",118,66.6],["Verdes Señoras",70,52.5],["Verdes Caballeros",61,51]]],
 ["PITCH AND PUTT SANT JORDI","San Jorge","Castellón",18,54,40.50875,0.33135,[3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3],[16,4,10,14,18,8,6,2,12,13,9,3,5,7,17,11,15,1],[["Verdes Señoras",70,52.5],["Verdes Caballeros",61,51]]],
-["PUIG CAMPANA GOLF","Finestrat","Alicante",18,72,38.5451,-0.20807,[3,4,5,3,4,4,4,4,5,3,4,5,3,4,4,4,4,5],[15,11,9,17,3,5,13,1,7,16,12,10,18,4,6,14,2,8],[["Blancas Caballeros",146,73.6],["Amarillas Caballeros",126,71.1],["Azules Señoras",141,74.1],["Azules Caballeros",123,68.8],["Rojas Señoras",130,71.6],["Rojas Caballeros",115,67]]],
+["PUIG CAMPANA GOLF","Finestrat","Alicante",18,72,38.5453,-0.20796,[3,4,5,3,4,4,4,4,5,3,4,5,3,4,4,4,4,5],[15,11,9,17,3,5,13,1,7,16,12,10,18,4,6,14,2,8],[["Blancas Caballeros",146,73.6],["Amarillas Caballeros",126,71.1],["Azules Señoras",141,74.1],["Azules Caballeros",123,68.8],["Rojas Señoras",130,71.6],["Rojas Caballeros",115,67]]],
 ["REAL CLUB DE GOLF DE MANISES","Manises","Valencia",18,72,39.49594,-0.48779,[4,5,4,3,5,5,3,4,3,4,5,4,3,5,5,3,4,3],[9,15,3,13,5,11,17,1,7,10,16,4,14,6,12,18,2,8],[["Blancas Caballeros",142,72.3],["Amarillas Caballeros",128,68.5],["Azules Señoras",130,74.2],["Azules Caballeros",125,68.1],["Rojas Señoras",123,70.8],["Rojas Caballeros",118,65.5]]],
 ["VISTABELLA GOLF CLUB","Jacarilla","Alicante",18,72,38.04048,-0.82238,[4,3,5,4,5,4,3,4,4,5,3,4,4,5,3,4,4,4],[15,17,11,13,3,1,9,7,5,2,6,18,12,4,8,16,14,10],[["Blancas Caballeros",135,71.8],["Amarillas Caballeros",130,70],["Azules Señoras",139,73.8],["Azules Caballeros",127,67.9],["Rojas Señoras",131,70.6],["Rojas Caballeros",115,65.7]]],
 ["AGUILON GOLF","Pilar de Jaravia","Almería",18,71,37.36607,-1.70826,[4,4,3,4,5,4,4,3,5,5,4,3,4,3,4,4,3,5],[10,11,6,8,4,5,12,17,2,7,18,9,3,15,14,13,16,1],[["Blancas Caballeros",131,71.4],["Amarillas Señoras",137,73],["Amarillas Caballeros",123,67.6],["Azules Señoras",128,68.9],["Azules Caballeros",113,64.4],["Rojas Señoras",121,67.2],["Rojas Caballeros",112,63.1],["Negras Caballeros",132,72.6]]],
@@ -721,7 +747,7 @@ const GOLF_CATALOG = [
 ["ESCUELA DE GOLF MIGUEL ÁNGEL JIMÉNEZ","Torremolinos","Málaga",18,54,36.63616,-4.49631,[3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3],[17,15,9,5,7,13,1,3,11,18,16,10,6,8,14,2,4,12],[["Verdes Señoras",75,53.7],["Verdes Caballeros",66,51.8]]],
 ["ESCUELA PÚBLICA LA CARTUJA","Sevilla","Sevilla",18,58,37.42367,-6.00003,[4,3,3,3,3,3,4,3,3,4,3,3,3,3,3,4,3,3],[3,5,13,12,10,15,2,11,9,4,14,7,8,17,18,1,16,6],[["Amarillas Caballeros",66,54.8],["Rojas Señoras",74,55.4],["Rojas Caballeros",55,52.6],["Verdes Señoras",64,52.6],["Verdes Caballeros",55,51.2]]],
 ["FAIRPLAY GOLF & SPA RESORT","Benalup-Casas Viejas","Cádiz",18,73,36.33777,-5.82446,[4,3,4,4,5,4,4,3,5,3,4,3,5,4,5,4,4,5],[13,11,15,9,3,17,1,5,7,18,16,4,2,6,8,10,12,14],[["Blancas Caballeros",133,72.3],["Amarillas Caballeros",129,70],["Azules Señoras",129,72.9],["Azules Caballeros",123,67.9],["Rojas Señoras",126,69.8],["Rojas Caballeros",112,65.2]]],
-["FINCA CORTESIN GOLF CLUB","Casares","Málaga",18,72,36.44335,-5.27289,[4,3,5,4,5,3,4,5,4,3,5,3,4,4,4,4,3,5],[9,7,3,15,11,13,1,5,17,10,2,6,16,14,4,12,18,8],[["Blancas Caballeros",139,74.6],["Doradas Caballeros",131,68.6],["Amarillas Caballeros",138,72],["Azules Señoras",134,74],["Azules Caballeros",122,68.3],["Rojas Señoras",129,72],["Rojas Caballeros",117,66.5],["Negras Caballeros",138,77]]],
+["FINCA CORTESIN GOLF CLUB","Casares","Málaga",18,72,36.39714,-5.22391,[4,3,5,4,5,3,4,5,4,3,5,3,4,4,4,4,3,5],[9,7,3,15,11,13,1,5,17,10,2,6,16,14,4,12,18,8],[["Blancas Caballeros",139,74.6],["Doradas Caballeros",131,68.6],["Amarillas Caballeros",138,72],["Azules Señoras",134,74],["Azules Caballeros",122,68.3],["Rojas Señoras",129,72],["Rojas Caballeros",117,66.5],["Negras Caballeros",138,77]]],
 ["GOLF EL ROMPIDO","Cartaya","Huelva",18,72,37.23158,-7.1409,[4,3,4,4,5,4,4,3,5,4,4,5,3,5,4,3,4,4],[2,16,14,8,6,10,12,18,4,3,15,17,11,1,9,5,7,13],[["Blancas Caballeros",134,72.2],["Amarillas Caballeros",131,70.8],["Azules Señoras",134,75.2],["Azules Caballeros",126,68.6],["Rojas Señoras",128,72.4],["Rojas Caballeros",119,66.5],["Negras Caballeros",134,73.5]]],
 ["GOLF MARBELLA & COUNTRY CLUB","Marbella","Málaga",18,72,36.49899,-5.0566,[4,5,3,4,4,5,4,4,3,4,3,4,5,4,4,3,5,4],[5,7,17,9,15,1,3,13,11,8,10,2,16,6,4,12,18,14],[["Blancas Caballeros",132,71.6],["Amarillas Caballeros",130,70.1],["Azules Señoras",129,72.8],["Azules Caballeros",116,67.3],["Rojas Señoras",125,70.4],["Rojas Caballeros",111,65.5]]],
 ["GOLF NUEVO PORTIL","Portil, El","Huelva",18,71,37.21709,-7.06366,[5,3,4,4,4,4,3,4,4,4,5,4,3,4,5,4,3,4],[2,12,18,16,4,10,14,6,8,11,3,9,17,13,1,7,15,5],[["Blancas Caballeros",129,71.2],["Amarillas Caballeros",129,69.7],["Azules Señoras",126,73.1],["Azules Caballeros",120,66.1],["Rojas Señoras",123,72],["Rojas Caballeros",122,67]]],
@@ -786,7 +812,7 @@ const GOLF_CATALOG = [
 ["MARGAS GOLF","Latas","Huesca",18,71,42.52673,-0.3394,[4,4,4,3,4,3,5,3,5,4,4,4,3,4,4,5,3,5],[16,10,3,8,5,13,7,12,18,1,6,2,11,14,9,15,17,4],[["Blancas Caballeros",140,75.1],["Amarillas Caballeros",138,72.6],["Azules Señoras",139,75],["Azules Caballeros",129,68.9],["Rojas Señoras",134,72.4],["Rojas Caballeros",118,66.7]]],
 ["CAMPO MUNICIPAL LA LLOREA","Lloreda (Gijon)","Asturias",18,72,43.52059,-5.57654,[5,4,4,4,3,5,4,3,4,5,4,4,3,4,5,3,4,4],[7,9,15,1,17,3,5,13,11,4,10,2,8,14,16,6,18,12],[["Blancas Caballeros",126,71.4],["Amarillas Señoras",124,75.2],["Amarillas Caballeros",124,69.4],["Azules Señoras",123,73.3],["Azules Caballeros",115,67.9],["Rojas Señoras",118,71.6],["Rojas Caballeros",114,66.4],["Naranjas Señoras",111,68],["Naranjas Caballeros",104,63.6],["Negras Caballeros",127,72.2]]],
 ["CASTROPOL GOLF","Castropol","Asturias",18,72,43.53566,-6.95423,[3,4,4,4,4,5,5,4,3,3,4,4,4,4,5,5,4,3],[7,11,17,15,5,13,3,9,1,8,12,18,16,6,14,4,10,2],[["Amarillas Caballeros",139,72],["Rojas Señoras",134,70.5]]],
-["CLUB DE GOLF CIERRO GRANDE","Rapalcuarto","Asturias",18,70,43.48138,-5.4345,[5,3,4,5,4,3,4,4,3,5,3,4,4,4,3,5,4,3],[7,14,5,4,10,16,2,13,17,6,11,3,1,9,15,8,12,18],[["Amarillas Caballeros",133,69.7],["Rojas Señoras",126,71.1],["Rojas Caballeros",110,65.2]]],
+["CLUB DE GOLF CIERRO GRANDE","Rapalcuarto","Asturias",18,70,43.54896,-6.95086,[5,3,4,5,4,3,4,4,3,5,3,4,4,4,3,5,4,3],[7,14,5,4,10,16,2,13,17,6,11,3,1,9,15,8,12,18],[["Amarillas Caballeros",133,69.7],["Rojas Señoras",126,71.1],["Rojas Caballeros",110,65.2]]],
 ["CLUB DE GOLF LA RASA DE BERBES","Ribadesella","Asturias",18,71,43.46783,-5.14498,[4,4,4,3,4,5,3,4,5,4,4,4,3,4,4,4,4,4],[13,3,5,9,15,7,17,11,1,14,18,10,16,12,2,4,6,8],[["Amarillas Caballeros",131,70.1],["Rojas Señoras",123,71.1],["Rojas Caballeros",115,65.7]]],
 ["CLUB DE GOLF LAS CALDAS","Caldas, Las","Asturias",18,71,43.32729,-5.91399,[4,3,5,4,4,4,3,4,4,4,5,3,5,4,4,4,3,4],[13,17,1,3,11,14,15,7,9,6,5,12,2,18,4,8,16,10],[["Blancas Caballeros",139,71.6],["Amarillas Caballeros",134,69.6],["Azules Señoras",127,71.8],["Azules Caballeros",122,66.6],["Rojas Señoras",126,69.7],["Rojas Caballeros",118,65.1]]],
 ["CLUB DE GOLF LOS BALAGARES","Aviles","Asturias",18,70,43.54483,-5.88847,[5,3,4,4,3,4,4,4,4,4,3,4,3,4,3,5,4,5],[3,15,1,7,13,5,17,14,9,10,11,8,18,12,16,2,6,4],[["Blancas Caballeros",129,69.1],["Amarillas Caballeros",128,68.9],["Rojas Señoras",122,69.7],["Rojas Caballeros",110,64.1]]],
@@ -851,10 +877,10 @@ const GOLF_CATALOG = [
 ["GOLF CIUDAD REAL","Ciudad Real","Ciudad Real",18,64,39.04402,-3.9023,[4,3,4,4,3,4,3,3,4,4,3,4,4,3,4,3,3,4],[15,9,5,17,1,13,11,3,7,16,10,6,18,2,14,12,4,8],[["Amarillas Caballeros",102,60],["Rojas Señoras",103,61.8],["Rojas Caballeros",93,58.6],["Verdes Señoras",70,53],["Verdes Caballeros",57,51.4]]],
 ["GOLF DE VALDELUZ","Yebes","Guadalajara",18,72,40.58547,-3.12121,[5,3,4,5,4,4,4,4,3,4,5,3,4,5,3,4,4,4],[9,17,11,15,3,1,5,13,7,14,12,4,18,16,8,6,2,10],[["Blancas Caballeros",132,71.8],["Amarillas Caballeros",131,70.8],["Azules Señoras",140,73.7],["Azules Caballeros",122,68.3],["Rojas Señoras",136,72.2],["Rojas Caballeros",118,67.1]]],
 ["GUADALAJARA CLUB DE GOLF (CABANILLAS GOLF)","Cabanillas del Campo","Guadalajara",18,72,40.65522,-3.24584,[5,4,3,4,5,4,3,4,4,5,4,3,4,4,4,5,3,4],[2,8,4,10,18,6,16,14,12,9,17,11,13,5,1,3,7,15],[["Blancas Caballeros",148,74.5],["Amarillas Caballeros",140,72.4],["Azules Señoras",147,75.3],["Azules Caballeros",131,70.2],["Rojas Señoras",139,71.7],["Rojas Caballeros",125,67.3],["Naranjas Señoras",126,65.2],["Naranjas Caballeros",111,61.8],["Verdes Señoras",64,51.7],["Verdes Caballeros",60,50.5]]],
-["LA CAMINERA","Torrenueva","Ciudad Real",18,68,38.63978,-3.36481,[3,4,4,3,4,4,3,4,5,3,4,4,3,4,4,3,4,5],[3,15,17,13,11,7,5,1,9,4,16,18,14,12,8,6,2,10],[["Amarillas Caballeros",131,63.6],["Rojas Señoras",114,64.8],["Rojas Caballeros",100,63],["Verdes Señoras",65,52.1],["Verdes Caballeros",58,51.1]]],
+["LA CAMINERA","Torrenueva","Ciudad Real",18,68,38.66867,-3.30315,[3,4,4,3,4,4,3,4,5,3,4,4,3,4,4,3,4,5],[3,15,17,13,11,7,5,1,9,4,16,18,14,12,8,6,2,10],[["Amarillas Caballeros",131,63.6],["Rojas Señoras",114,64.8],["Rojas Caballeros",100,63],["Verdes Señoras",65,52.1],["Verdes Caballeros",58,51.1]]],
 ["LAYOS CASA CAMPO S.A.","Layos","Toledo",18,72,39.77221,-4.07579,[5,4,4,5,4,4,3,3,4,4,3,4,4,5,3,4,5,4],[14,16,2,8,12,10,18,4,6,13,17,9,1,11,15,3,7,5],[["Blancas Caballeros",134,74.8],["Doradas Caballeros",115,66.2],["Amarillas Caballeros",122,72.3],["Azules Señoras",136,75.2],["Azules Caballeros",122,68.9],["Rojas Señoras",122,70],["Rojas Caballeros",108,65],["Naranjas Caballeros",124,70.8]]],
 ["PALOMAREJOS GOLF","Talavera de la Reina","Toledo",18,72,39.97078,-4.7897,[4,3,4,3,5,4,5,4,5,4,4,4,3,5,4,3,4,4],[5,15,8,17,9,10,11,16,12,14,2,18,13,3,1,7,4,6],[["Blancas Caballeros",136,71.3],["Amarillas Caballeros",136,69.7],["Azules Señoras",129,72.6],["Azules Caballeros",119,67.4],["Rojas Señoras",124,70.1],["Rojas Caballeros",118,65.7]]],
-["ALDEAMAYOR CLUB DE GOLF","Aldeamayor de San Martin","Valladolid",18,70,41.50782,-4.68172,[5,4,4,3,4,3,4,4,4,3,4,3,4,4,4,4,5,4],[7,17,6,11,12,13,1,14,9,2,4,3,18,10,8,16,5,15],[["Blancas Caballeros",127,69.8],["Amarillas Caballeros",123,68.4],["Azules Señoras",130,71.5],["Azules Caballeros",115,67.4],["Rojas Señoras",126,70.3],["Rojas Caballeros",111,66.3],["Verdes Señoras",84,55.2],["Verdes Caballeros",73,53.1]]],
+["ALDEAMAYOR CLUB DE GOLF","Aldeamayor de San Martin","Valladolid",18,70,41.50778,-4.68169,[5,4,4,3,4,3,4,4,4,3,4,3,4,4,4,4,5,4],[7,17,6,11,12,13,1,14,9,2,4,3,18,10,8,16,5,15],[["Blancas Caballeros",127,69.8],["Amarillas Caballeros",123,68.4],["Azules Señoras",130,71.5],["Azules Caballeros",115,67.4],["Rojas Señoras",126,70.3],["Rojas Caballeros",111,66.3],["Verdes Señoras",84,55.2],["Verdes Caballeros",73,53.1]]],
 ["BOCIGAS CLUB DE GOLF","Bocigas","Valladolid",18,64,41.23204,-4.67892,[3,4,4,4,3,5,3,3,3,3,4,4,4,3,5,3,3,3],[18,12,10,11,16,8,3,2,5,17,13,9,14,15,7,6,1,4],[["Amarillas Caballeros",117,62.8],["Rojas Señoras",115,64.1]]],
 ["C. MUNICIPAL DE GOLF ISLA DOS AGUAS","Palencia","Palencia",18,64,41.99981,-4.53539,[4,4,3,3,4,4,3,3,4,4,4,3,3,4,4,3,3,4],[5,1,15,7,3,11,13,17,9,6,2,16,8,4,12,14,18,10],[["Amarillas Caballeros",111,61.9],["Rojas Señoras",115,64.2],["Rojas Caballeros",104,60.7],["Verdes Señoras",75,52.8],["Verdes Caballeros",67,51.4]]],
 ["C.D. LA FAISANERA GOLF SEGOVIA","Palazuelos de Eresma","Segovia",18,71,40.91557,-4.05524,[5,3,4,3,4,5,3,4,4,3,4,3,5,4,5,4,3,5],[8,18,4,14,2,6,12,10,16,13,5,17,1,9,15,7,11,3],[["Blancas Caballeros",129,71.6],["Amarillas Caballeros",125,69.7],["Azules Señoras",134,73.3],["Azules Caballeros",115,67.9],["Rojas Señoras",130,70.9],["Rojas Caballeros",111,66],["Negras Caballeros",129,73.3]]],
@@ -918,7 +944,7 @@ const GOLF_CATALOG = [
 ["GOLF CLUB PERALADA","Peralada","Girona",18,71,42.31566,3.02625,[4,4,4,5,4,3,5,4,3,4,4,3,5,3,4,4,5,3],[18,2,8,16,6,4,10,14,12,11,9,13,5,17,7,1,3,15],[["Blancas Caballeros",137,72.3],["Amarillas Caballeros",131,70.1],["Azules Señoras",130,71.8],["Azules Caballeros",116,66.5],["Rojas Señoras",123,69.9],["Rojas Caballeros",111,64.9]]],
 ["GOLF DE CALDES","Caldes de Montbui","Barcelona",18,72,41.65056,2.17724,[4,5,3,4,3,4,4,5,4,4,5,3,4,3,4,4,5,4],[5,9,15,3,17,11,1,7,13,6,10,16,4,18,12,2,8,14],[["Blancas Caballeros",129,73.2],["Amarillas Caballeros",126,71.7],["Azules Señoras",128,74.5],["Azules Caballeros",129,69],["Rojas Señoras",124,73.2],["Rojas Caballeros",125,67.9]]],
 ["GOLF LA ROCA","Roca del Valles, la","Barcelona",18,71,41.63071,2.35133,[4,5,3,5,4,3,4,4,4,4,4,3,5,4,4,3,5,3],[3,1,13,15,9,5,17,11,7,10,4,14,8,2,12,18,6,16],[["Blancas Caballeros",132,72.4],["Amarillas Caballeros",129,70.7],["Azules Señoras",127,71.9],["Azules Caballeros",119,67],["Rojas Señoras",123,69.7],["Rojas Caballeros",113,65],["Naranjas Señoras",133,73.7],["Naranjas Caballeros",125,68.6]]],
-["GOLF LA ROQUETA","Castellgali","Barcelona",18,72,41.92194,2.32407,[4,3,3,5,4,3,5,4,5,4,3,3,5,4,3,5,4,5],[17,11,5,3,7,9,1,15,13,18,12,6,4,8,10,2,16,14],[["Amarillas Caballeros",128,68.6],["Rojas Señoras",129,69.3],["Rojas Caballeros",111,65.4]]],
+["GOLF LA ROQUETA","Castellgali","Barcelona",18,72,41.68684,1.83657,[4,3,3,5,4,3,5,4,5,4,3,3,5,4,3,5,4,5],[17,11,5,3,7,9,1,15,13,18,12,6,4,8,10,2,16,14],[["Amarillas Caballeros",128,68.6],["Rojas Señoras",129,69.3],["Rojas Caballeros",111,65.4]]],
 ["GOLF PLAYA DE PALS","Pals","Girona",18,73,41.99355,3.1952,[4,4,4,4,5,3,4,5,3,4,3,4,4,5,3,5,4,5],[14,6,12,2,4,18,8,10,16,5,17,1,9,11,15,13,3,7],[["Blancas Caballeros",135,73.9],["Amarillas Caballeros",133,72],["Azules Señoras",131,74.8],["Azules Caballeros",119,68.4],["Rojas Señoras",128,73],["Rojas Caballeros",118,67]]],
 ["GOLF SANT JOAN","Sant Cugat del Valles","Barcelona",18,72,41.49859,2.05396,[4,4,4,4,4,5,3,5,3,4,3,4,3,5,3,5,5,4],[5,7,11,1,9,3,17,13,15,16,12,4,14,6,18,2,8,10],[["Blancas Caballeros",138,71.5],["Amarillas Caballeros",136,70.4],["Azules Señoras",134,73.3],["Rojas Señoras",126,70.1],["Negras Caballeros",140,72.2]]],
 ["GOLF SANT MARC-CLUB DE GOLF PUIGCERDÁ","Puigcerda","Girona",18,57,42.4146,1.92814,[4,3,3,4,3,3,3,3,3,3,3,3,3,3,3,3,3,4],[1,15,17,5,13,9,7,11,3,10,6,18,4,8,14,16,12,2],[["Amarillas Caballeros",96,56.9],["Rojas Señoras",82,57.7],["Rojas Caballeros",67,55.3]]],
@@ -954,7 +980,7 @@ const GOLF_CATALOG = [
 ["GOLF SANTANDER S.A.","Boadilla del Monte","Madrid",18,72,40.39178,-3.86473,[5,4,3,4,5,4,3,4,4,4,3,5,4,4,4,4,3,5],[8,4,18,2,6,16,12,10,14,3,17,1,15,7,5,11,9,13],[["Blancas Caballeros",142,75.6],["Amarillas Caballeros",140,71.3],["Azules Señoras",155,80],["Azules Caballeros",141,73.1],["Rojas Señoras",136,71.4],["Negras Caballeros",152,77.3],["Verdes Señoras",142,74.2],["Verdes Caballeros",133,69.1]]],
 ["GREEN PADDOCK S.A.","Torrelodones","Madrid",18,54,40.59328,-3.95414,[3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3],[15,13,5,9,7,17,3,11,1,16,14,6,10,8,18,4,12,2],[["Verdes Señoras",70,52.2],["Verdes Caballeros",62,50.9]]],
 ["LA PEÑUELA","Cabanillas de la Sierra","Madrid",18,54,40.82608,-3.62249,[3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3],[4,13,2,11,18,7,15,5,9,3,14,1,12,17,8,16,6,10],[["Verdes Señoras",67,52],["Verdes Caballeros",57,50.7]]],
-["LAS REJAS GOLF MAJADAHONDA","Majadahonda","Madrid",18,70,40.47284,-3.87235,[4,4,3,5,4,4,3,5,3,4,4,3,5,4,4,3,5,3],[7,3,13,5,11,9,15,1,17,8,4,14,6,12,10,16,2,18],[["Blancas Caballeros",136,69.5],["Amarillas Caballeros",109,60.6],["Rojas Señoras",108,62.5],["Rojas Caballeros",117,64.8],["Verdes Señoras",75,54.1],["Verdes Caballeros",67,52.3]]],
+["LAS REJAS GOLF MAJADAHONDA","Majadahonda","Madrid",18,70,40.44502,-3.86947,[4,4,3,5,4,4,3,5,3,4,4,3,5,4,4,3,5,3],[7,3,13,5,11,9,15,1,17,8,4,14,6,12,10,16,2,18],[["Blancas Caballeros",136,69.5],["Amarillas Caballeros",109,60.6],["Rojas Señoras",108,62.5],["Rojas Caballeros",117,64.8],["Verdes Señoras",75,54.1],["Verdes Caballeros",67,52.3]]],
 ["NUEVO CLULB DE GOLF DE MADRID","Matas, Las","Madrid",18,70,40.54228,-3.91755,[4,5,3,4,3,4,3,4,4,5,3,4,5,4,4,3,4,4],[15,5,9,1,3,17,13,11,7,12,16,2,14,10,8,18,4,6],[["Blancas Caballeros",129,70.4],["Amarillas Caballeros",127,69.2],["Azules Señoras",131,72.2],["Azules Caballeros",123,66.9],["Rojas Señoras",127,70.7],["Rojas Caballeros",126,65.5]]],
 ["PALACIO DEL NEGRALEJO S.A.","Rivas-Vaciamadrid","Madrid",18,56,40.4078,-3.51327,[3,3,3,3,3,3,4,3,4,3,3,3,3,3,3,3,3,3],[14,6,5,3,7,10,1,8,2,17,11,15,16,12,18,4,13,9],[["Amarillas Caballeros",68,52.9],["Rojas Señoras",72,53.6],["Verdes Señoras",68,52.4],["Verdes Caballeros",62,51]]],
 ["R.S.H.E. CLUB DE CAMPO","San Sebastian de los Reyes, Industrial de","Madrid",18,72,40.54708,-3.61303,[4,5,3,4,4,4,3,4,5,4,3,4,5,4,4,5,3,4],[5,15,11,1,17,13,9,3,7,10,16,18,6,12,2,8,14,4],[["Blancas Caballeros",140,72.9],["Doradas Caballeros",138,69.3],["Amarillas Caballeros",139,70.8],["Azules Señoras",142,74.5],["Azules Caballeros",136,69.6],["Rojas Señoras",137,71.9],["Rojas Caballeros",129,67.8],["Verdes Señoras",66,52.7],["Verdes Caballeros",63,51.4]]],
@@ -1659,6 +1685,9 @@ function openRound() {
     ' · ' + active.pars.length + ' hoyos · ' + modeLbl + hcpLbl;
   $('#totbar').classList.toggle('stb', active.mode === 'stableford');
   strokesShowStb = false; // al abrir la ronda, la casilla Golpes muestra golpes
+  // Empezar en el primer hoyo sin apuntar (para retomar una ronda en curso donde se dejó)
+  curHole = active.holes.findIndex(h => !h.strokes);
+  if (curHole < 0) curHole = active.holes.length - 1;
   renderHoles();
   window.scrollTo(0, 0);
 }
@@ -1668,10 +1697,29 @@ function closeRound(toTab) {
   showTab(toTab || curTab);
 }
 
+// Un solo hoyo en pantalla (el que se está jugando). La barra inferior navega entre hoyos.
+let curHole = 0;
 function renderHoles() {
   const box = $('#holes'); box.innerHTML = '';
-  active.holes.forEach((h, i) => box.appendChild(holeCard(h, i)));
+  curHole = Math.max(0, Math.min(curHole, active.holes.length - 1));
+  box.appendChild(holeCard(active.holes[curHole], curHole));
+  updateHoleNav();
   updateTotals();
+}
+function goHole(d) {
+  curHole = Math.max(0, Math.min(active.holes.length - 1, curHole + d));
+  renderHoles();
+  window.scrollTo(0, 0);
+}
+function updateHoleNav() {
+  const n = active.holes.length;
+  $('#navHoleNo').textContent = (active.holeStart || 1) + curHole;
+  $('#navHolePar').textContent = active.pars[curHole];
+  const si = active.si && active.si[curHole] ? active.si[curHole] : null;
+  $('#navHoleSi').parentElement.style.display = si ? '' : 'none';
+  if (si) $('#navHoleSi').textContent = si;
+  $('#holePrev').disabled = curHole === 0;
+  $('#holeNext').disabled = curHole === n - 1;
 }
 
 function holeCard(h, i) {
@@ -1739,6 +1787,7 @@ function holeCard(h, i) {
       b.classList.toggle('miss', b.dataset.f !== 'hit');
     });
     markDirty();
+    updateHoleNav(); // el par se edita en la tarjeta → reflejarlo en la barra del hoyo
     updateTotals();
   };
 
@@ -1804,6 +1853,8 @@ $('#btnBackRound').onclick = () => {
   }
   closeRound();
 };
+$('#holePrev').onclick = () => goHole(-1);
+$('#holeNext').onclick = () => goHole(1);
 
 /* ---------- Course modal ---------- */
 function openCourseModal(course, prefill) {
