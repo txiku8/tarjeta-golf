@@ -53,7 +53,6 @@ function startRound(course, opts) {
   const si = course.si ? course.si.slice(from, to) : null;
   active = {
     id: uid(), courseId: course.id, courseName: course.name, courseLoc: course.loc,
-    lat: course.lat != null ? course.lat : null, lon: course.lon != null ? course.lon : null,
     pars, si, date: new Date().toISOString(),
     holeStart: from + 1, // nº del primer hoyo (para numerar 10-18 correctamente)
     mode: opts.mode || 'medal',
@@ -71,6 +70,7 @@ function openRound() {
   document.querySelectorAll('main.tab').forEach(m => m.classList.add('hidden'));
   $('#tabbar').classList.add('hidden');
   $('#mapFab').classList.add('hidden');
+  const appHeader = document.querySelector('header.app'); if (appHeader) appHeader.classList.add('hidden');
   $('#viewRound').classList.remove('hidden');
   $('#roundBar').classList.remove('hidden');
   $('#rTitle').textContent = active.courseName;
@@ -78,255 +78,313 @@ function openRound() {
   const hcpLbl = active.hcp != null ? ' · ' + active.hcp + ' golpes' + (active.barra ? ' (' + active.barra + ')' : '') : '';
   $('#rSub').textContent = (active.courseLoc ? active.courseLoc + ' · ' : '') + fmtDate(active.date) +
     ' · ' + active.pars.length + ' hoyos · ' + modeLbl + hcpLbl;
-  $('#totbar').classList.toggle('stb', active.mode === 'stableford');
-  strokesShowStb = false; // al abrir la ronda, la casilla Golpes muestra golpes
-  // Empezar en el primer hoyo sin apuntar (para retomar una ronda en curso donde se dejó)
-  curHole = active.holes.findIndex(h => !h.strokes);
-  if (curHole < 0) curHole = active.holes.length - 1;
-  holeGeom = null;
-  renderHoles();
-  loadHoleGeom();
-  openScoreSheet();
+  // hoyo activo del editor: el primero sin apuntar, o el primero
+  const firstEmpty = active.holes.findIndex(h => !h.strokes);
+  selHole = firstEmpty >= 0 ? firstEmpty : 0;
+  renderRound();
   window.scrollTo(0, 0);
 }
 function closeRound(toTab) {
-  $('#scoreSheetBg').classList.add('hidden');
-  $('#scoreSheetBg').classList.remove('show');
   $('#viewRound').classList.add('hidden');
   $('#roundBar').classList.add('hidden');
+  $('#roundSheet').classList.add('hidden'); $('#roundSheet').classList.remove('open');
+  const appHeader = document.querySelector('header.app'); if (appHeader) appHeader.classList.remove('hidden');
   showTab(toTab || curTab);
 }
 
-// Un hoyo a la vez: la zona principal muestra el hoyo en satélite; la hoja de resultados
-// sube sola al cambiar de hoyo. La barra inferior navega entre hoyos.
-let curHole = 0, holeMap = null, holeGeoLayer = null, holeGeom = null;
-
-function renderHoles() {
-  curHole = Math.max(0, Math.min(curHole, active.holes.length - 1));
-  showHoleMap();
-  updateHoleNav();
-  updateTotals();
+/* Panel desplegable (bottom sheet) con todos los hoyos para saltar entre ellos. */
+function renderSheetHoles() {
+  const recv = golfStrokesReceived(active);
+  const stb = active.mode === 'stableford';
+  const box = $('#rsHoles');
+  box.innerHTML = active.holes.map((h, i) => {
+    const played = !!h.strokes;
+    const dots = (stb && recv[i] > 0) ? `<div class="sh-dots">${'•'.repeat(recv[i])}</div>` : `<div class="sh-dots empty"></div>`;
+    return `<button class="sh-hole ${i === selHole ? 'active' : ''}" data-i="${i}">
+      <div class="sh-no tnum">${holeNo(i)}</div>
+      <div class="sh-score tnum" style="${played ? `background:${scoreColor(h.strokes, active.pars[i])};color:#fff;border-color:transparent` : ''}">${h.strokes || '·'}</div>
+      ${dots}
+    </button>`;
+  }).join('');
+  box.querySelectorAll('[data-i]').forEach(b => b.onclick = () => {
+    selHole = +b.dataset.i; renderEditor(); highlightSel(); closeRoundSheet(); window.scrollTo(0, 0);
+  });
 }
-function goHole(d) {
-  curHole = Math.max(0, Math.min(active.holes.length - 1, curHole + d));
-  renderHoles();
-  openScoreSheet(); // al cambiar de hoyo, pedir los resultados
+function openRoundSheet() {
+  renderSheetHoles();
+  const s = $('#roundSheet');
+  s.classList.remove('hidden');
+  requestAnimationFrame(() => s.classList.add('open'));
 }
-function updateHoleNav() {
-  const n = active.holes.length;
-  $('#navHoleNo').textContent = (active.holeStart || 1) + curHole;
-  $('#navHolePar').textContent = active.pars[curHole];
-  const si = active.si && active.si[curHole] ? active.si[curHole] : null;
-  $('#navHoleSi').parentElement.style.display = si ? '' : 'none';
-  if (si) $('#navHoleSi').textContent = si;
-  $('#holePrev').disabled = curHole === 0;
-  $('#holeNext').disabled = curHole === n - 1;
-}
-
-/* ---- Visor satélite del hoyo (imágenes Esri, gratis) + trazado real desde OSM ---- */
-function courseCoords() {
-  if (active && active.lat != null) return { lat: active.lat, lon: active.lon };
-  const c = GOLF_CATALOG.find(x => x.n === (active && active.courseName));
-  return c && c.lat != null ? { lat: c.lat, lon: c.lon } : null;
-}
-function ensureHoleMap() {
-  if (holeMap) return;
-  holeMap = L.map('holeMap', { zoomControl: false, attributionControl: false, scrollWheelZoom: false, tap: true }).setView([40.2, -3.7], 15);
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles &copy; Esri' }).addTo(holeMap);
-  holeGeoLayer = L.layerGroup().addTo(holeMap);
-}
-function holeMeters(g) {
-  let m = 0;
-  for (let i = 1; i < g.length; i++) m += haversineKm(g[i-1][0], g[i-1][1], g[i][0], g[i][1]) * 1000;
-  return m;
-}
-function showHoleMap() {
-  const num = (active.holeStart || 1) + curHole;
-  $('#hvTitle').textContent = 'Hoyo ' + num;
-  ensureHoleMap();
-  holeGeoLayer.clearLayers();
-  const g = holeGeom && holeGeom[num];
-  setTimeout(() => { if (holeMap) holeMap.invalidateSize(); }, 30);
-  if (g && g.length >= 2) {
-    const line = L.polyline(g, { color: '#fff', weight: 4, opacity: .95 }).addTo(holeGeoLayer);
-    L.circleMarker(g[0], { radius: 6, color: '#fff', weight: 2, fillColor: '#5b5be6', fillOpacity: 1 }).addTo(holeGeoLayer);        // tee
-    L.circleMarker(g[g.length-1], { radius: 7, color: '#fff', weight: 2, fillColor: '#e6483d', fillOpacity: 1 }).addTo(holeGeoLayer); // green
-    setTimeout(() => { holeMap.invalidateSize(); holeMap.fitBounds(line.getBounds().pad(0.45)); }, 45);
-    $('#hvDist').textContent = Math.round(holeMeters(g)) + ' m';
-  } else {
-    const c = courseCoords();
-    if (c) holeMap.setView([c.lat, c.lon], 16);
-    $('#hvDist').textContent = '';
-  }
-}
-// Descarga (una vez por campo, cacheada) el trazado de cada hoyo desde OpenStreetMap.
-function loadHoleGeom() {
-  holeGeom = null;
-  const c = courseCoords(); if (!c) return;
-  const key = 'golf_hg_' + (active.courseName || '').replace(/[^\w]+/g, '_');
-  const cached = load(key, null);
-  if (cached && Object.keys(cached).length) { holeGeom = cached; showHoleMap(); return; }
-  const d = 0.02;
-  const q = '[out:json][timeout:25];way["golf"="hole"](' + (c.lat-d) + ',' + (c.lon-d) + ',' + (c.lat+d) + ',' + (c.lon+d) + ');out tags geom;';
-  const eps = ['https://overpass-api.de/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
-  (async () => {
-    for (const ep of eps) {
-      try {
-        const r = await fetch(ep, { method: 'POST', body: q });
-        if (!r.ok) continue;
-        const j = await r.json();
-        const g = {};
-        (j.elements || []).forEach(w => {
-          if (w.type === 'way' && w.tags && w.tags.ref && w.geometry) {
-            const ref = parseInt(w.tags.ref, 10);
-            if (ref) g[ref] = w.geometry.map(p => [p.lat, p.lon]);
-          }
-        });
-        if (Object.keys(g).length) {
-          holeGeom = g;
-          try { localStorage.setItem(key, JSON.stringify(g)); } catch (e) {}
-          showHoleMap();
-          return;
-        }
-      } catch (e) { /* sin conexión / OSM ocupado → se queda el satélite del campo */ }
-    }
-  })();
+function closeRoundSheet() {
+  const s = $('#roundSheet');
+  s.classList.remove('open');
+  setTimeout(() => s.classList.add('hidden'), 240);
 }
 
-/* ---- Hoja de resultados (sube sola al cambiar de hoyo) ---- */
-function openScoreSheet() {
-  const sheet = $('#scoreSheet');
-  sheet.innerHTML = '';
-  sheet.appendChild(el('div', 'sheet-grab'));
-  sheet.appendChild(holeCard(active.holes[curHole], curHole));
-  const btn = el('button', 'btn sheet-confirm', 'Confirmar');
-  btn.onclick = closeScoreSheet;
-  sheet.appendChild(btn);
-  const bg = $('#scoreSheetBg');
-  bg.classList.remove('hidden');
-  requestAnimationFrame(() => bg.classList.add('show'));
-}
-function closeScoreSheet() {
-  const bg = $('#scoreSheetBg');
-  bg.classList.remove('show');
-  setTimeout(() => bg.classList.add('hidden'), 220);
-}
-$('#scoreSheetBg').onclick = e => { if (e.target === $('#scoreSheetBg')) closeScoreSheet(); };
+/* ===== Pantalla de ronda: tarjeta clásica (arriba) + editor de un hoyo (abajo) ===== */
+let selHole = 0;                 // índice del hoyo activo en el editor
+const PICK_MIN = 1, PICK_MAX = 12, PICK_ITEM = 64; // selector de golpes deslizable
+let pickEl = null, pickLock = false, pickRaf = 0;
+const MP_ITEM = 34;              // ancho de cada número en los mini-selectores (putts/penal)
+let puttsMP = null;              // referencia al mini-selector de putts (para reposicionarlo)
 
-function holeCard(h, i) {
-  const par = active.pars[i];
-  const si = active.si && active.si[i] ? active.si[i] : null;
-  const c = el('div', 'hole');
-  const gir = isGir(h, par);
-  const badgeColor = scoreColor(h.strokes, par);
-  c.innerHTML = `
-    <div class="hole-head">
-      <div class="hole-no tnum">${(active.holeStart || 1) + i}</div>
-      <div class="hole-par">
-        <div class="lbl">Par</div>
-        <div class="par-stepper"><button data-parminus>−</button><b class="tnum" data-parval>${par}</b><button data-parplus>+</button></div>
-      </div>
-      ${si ? `<div class="hole-si" title="Índice de dificultad del hoyo (stroke index)"><div class="lbl">Índice</div><div class="siv tnum">${si}</div></div>` : ''}
-      ${h.strokes ? `<span class="gir-tag ${gir ? 'gir-yes' : 'gir-no'}" data-gir>${gir ? 'GIR ✓' : 'no GIR'}</span>` : ''}
-      <div class="score-badge tnum" data-badge style="background:${badgeColor}">${h.strokes || '–'}</div>
-    </div>
-    <div class="hole-body">
-      <div class="row2">
-        <div class="field">
-          <div class="flbl">Golpes</div>
-          <div class="stepper"><button data-s="strokes" data-d="-1">−</button><span class="val tnum" data-v="strokes">${h.strokes}</span><button data-s="strokes" data-d="1">+</button></div>
-        </div>
-        <div class="field">
-          <div class="flbl">Putts</div>
-          <div class="stepper"><button data-s="putts" data-d="-1">−</button><span class="val tnum" data-v="putts">${h.putts}</span><button data-s="putts" data-d="1">+</button></div>
-        </div>
-        <div class="field">
-          <div class="flbl">Penal.</div>
-          <div class="stepper"><button data-s="pen" data-d="-1">−</button><span class="val tnum" data-v="pen">${h.pen || 0}</span><button data-s="pen" data-d="1">+</button></div>
-        </div>
-      </div>
-      <div class="field">
-        <div class="flbl">Salida (calle)</div>
-        <div class="seg" data-fir>
-          <button data-f="left">◄ Izq</button>
-          <button data-f="hit">Calle ✓</button>
-          <button data-f="right">Dcha ►</button>
-        </div>
-      </div>
-    </div>`;
+function holeNo(i) { return (active.holeStart || 1) + i; }
+function holePoints(i, recv) {
+  const h = active.holes[i];
+  if (!h.strokes) return null;
+  return Math.max(0, 2 + (active.pars[i] + recv[i]) - h.strokes);
+}
+function girClass(i) {
+  const h = active.holes[i];
+  return 'gir-circle' + (!h.strokes ? ' hidden' : (isGir(h, active.pars[i]) ? ' yes' : ' no'));
+}
+function scoreLabelTxt(d) {
+  if (d <= -3) return 'Albatros'; if (d === -2) return 'Eagle'; if (d === -1) return 'Birdie';
+  if (d === 0) return 'Par'; if (d === 1) return 'Bogey'; if (d === 2) return 'Doble'; return '+' + d;
+}
+function vsColor(v) { return v < 0 ? 'var(--birdie)' : v > 0 ? 'var(--bogey)' : 'var(--text)'; }
 
-  const refresh = () => {
-    const p = active.pars[i];
-    c.querySelector('[data-parval]').textContent = p;
-    c.querySelectorAll('[data-v]').forEach(v => v.textContent = h[v.dataset.v] || 0);
-    const badge = c.querySelector('[data-badge]');
-    badge.textContent = h.strokes || '–';
-    badge.style.background = scoreColor(h.strokes, p);
-    // gir tag
-    let tag = c.querySelector('[data-gir]');
-    if (h.strokes) {
-      const g = isGir(h, p);
-      if (!tag) { tag = el('span', '', ''); tag.setAttribute('data-gir', ''); c.querySelector('.hole-head').insertBefore(tag, badge); }
-      tag.className = 'gir-tag ' + (g ? 'gir-yes' : 'gir-no'); tag.textContent = g ? 'GIR ✓' : 'no GIR';
-    } else if (tag) tag.remove();
-    // fir segment state
-    const seg = c.querySelector('[data-fir]');
-    const par3 = p <= 3;
-    seg.querySelectorAll('button').forEach(b => {
-      b.disabled = par3;
-      b.classList.toggle('on', !par3 && h.fir === b.dataset.f);
-      b.classList.toggle('miss', b.dataset.f !== 'hit');
-    });
-    markDirty();
-    updateHoleNav(); // el par se edita en la tarjeta → reflejarlo en la barra del hoyo
-    updateTotals();
+function renderRound() { renderScorecard(); renderEditor(); updateTotals(); }
+
+// --- Tarjeta clásica ---
+function renderScorecard() {
+  const recv = golfStrokesReceived(active);
+  const stb = active.mode === 'stableford';
+  const t = roundTotals(active);
+  const idxs = active.holes.map((_, i) => i);
+  const frontIdx = idxs.filter(i => holeNo(i) <= 9);   // primeros nueve (OUT)
+  const backIdx = idxs.filter(i => holeNo(i) >= 10);    // segundos nueve (IN)
+  const showOut = frontIdx.length > 0, showIn = backIdx.length > 0, showTot = showOut && showIn;
+  const sumOver = (arr, fn) => arr.reduce((a, i) => a + fn(i), 0);
+  const dash = v => v || '–';
+
+  // Ensambla una fila de datos insertando las columnas OUT / IN / total. cellFn(i) da la celda del hoyo.
+  const assemble = (cellFn, outVal, inVal, totVal) => {
+    let s = '';
+    frontIdx.forEach(i => s += cellFn(i));
+    if (showOut) s += `<td class="tot subtot tnum">${outVal}</td>`;
+    backIdx.forEach(i => s += cellFn(i));
+    if (showIn) s += `<td class="tot subtot tnum">${inVal}</td>`;
+    if (showTot) s += `<td class="tot tnum">${totVal}</td>`;
+    return s;
   };
 
-  c.querySelectorAll('.stepper button').forEach(btn => btn.onclick = () => {
-    const key = btn.dataset.s, d = +btn.dataset.d;
-    h[key] = Math.max(0, (h[key] || 0) + d);
-    // putts nunca pueden igualar/superar los golpes: al menos 1 golpe llega al green
-    const maxPutts = Math.max(0, h.strokes - 1);
-    if (h.putts > maxPutts) h.putts = maxPutts;
-    refresh();
+  // Cabecera con OUT / IN / T
+  let head = '';
+  frontIdx.forEach(i => head += `<th class="tnum">${holeNo(i)}</th>`);
+  if (showOut) head += `<th class="subhead tnum">OUT</th>`;
+  backIdx.forEach(i => head += `<th class="tnum">${holeNo(i)}</th>`);
+  if (showIn) head += `<th class="subhead tnum">IN</th>`;
+  if (showTot) head += `<th class="tnum">T</th>`;
+
+  const fPar = i => active.pars[i];
+  const fMyPar = i => active.pars[i] + recv[i];
+  const fStr = i => active.holes[i].strokes || 0;
+  const fPts = i => active.holes[i].strokes ? holePoints(i, recv) : 0;
+
+  const parRow = `<tr class="par"><td class="rh">Par</td>${assemble(
+    i => `<td class="tnum">${active.pars[i]}</td>`,
+    sumOver(frontIdx, fPar), sumOver(backIdx, fPar), sumOver(idxs, fPar))}</tr>`;
+  const myParRow = stb ? `<tr class="mypar"><td class="rh">Mi par</td>${assemble(
+    i => `<td class="tnum">${active.pars[i] + recv[i]}</td>`,
+    sumOver(frontIdx, fMyPar), sumOver(backIdx, fMyPar), sumOver(idxs, fMyPar))}</tr>` : '';
+  const goRow = `<tr><td class="rh">Golpes</td>${assemble(
+    i => `<td class="go"><button data-i="${i}" class="${active.holes[i].strokes ? 'has' : ''} ${i === selHole ? 'sel' : ''}" style="${active.holes[i].strokes ? `background:${scoreColor(active.holes[i].strokes, active.pars[i])}` : ''}">${active.holes[i].strokes || '·'}</button></td>`,
+    dash(sumOver(frontIdx, fStr)), dash(sumOver(backIdx, fStr)), dash(t.strokes))}</tr>`;
+  const ptsRow = stb ? `<tr class="pts"><td class="rh">Pts</td>${assemble(
+    i => `<td class="tnum">${active.holes[i].strokes ? holePoints(i, recv) : '·'}</td>`,
+    sumOver(frontIdx, fPts), sumOver(backIdx, fPts), t.stb)}</tr>` : '';
+
+  $('#scGrid').innerHTML = `
+    <thead><tr><th class="rh">Hoyo</th>${head}</tr></thead>
+    <tbody>${parRow}${myParRow}${goRow}${ptsRow}</tbody>`;
+  $('#scGrid').querySelectorAll('[data-i]').forEach(b => b.onclick = () => { selHole = +b.dataset.i; renderEditor(); highlightSel(); });
+}
+function highlightSel() {
+  $('#scGrid').querySelectorAll('[data-i]').forEach(b => b.classList.toggle('sel', +b.dataset.i === selHole));
+}
+
+// --- Etiqueta de resultado (chip + puntos del hoyo) ---
+function scoreRightHtml(i, recv) {
+  const h = active.holes[i], par = active.pars[i];
+  if (!h.strokes) return `<div class="chip" style="background:var(--muted)">Sin apuntar</div>`;
+  const stb = active.mode === 'stableford';
+  const hp = stb ? holePoints(i, recv) : null;
+  const pts = stb ? `<div class="hpts"><b>${hp} pt${hp === 1 ? '' : 's'}</b></div>` : '';
+  return `<div class="chip" style="background:${scoreColor(h.strokes, par)}">${scoreLabelTxt(h.strokes - par)}</div>${pts}`;
+}
+function updateGir() { const el = $('#girBadge'); if (el) el.className = girClass(selHole); }
+
+// Mini-selector deslizable (estilo Golpes, tamaño reducido) para putts y penalizaciones.
+function miniPickerHtml(id, min, max) {
+  let s = '';
+  for (let x = min; x <= max; x++) s += `<div class="mnum tnum" data-x="${x}">${x}</div>`;
+  return `<div class="mpick-wrap"><div class="mpick-sel"></div><div class="mpick" id="${id}">${s}</div></div>`;
+}
+function wireMiniPicker(id, min, max, initVal, onSet) {
+  const el = $('#' + id);
+  const clamp = n => Math.max(min, Math.min(max, n));
+  let lock = true, raf = 0;
+  const paint = n => el.querySelectorAll('.mnum').forEach(d => d.classList.toggle('mid', +d.dataset.x === n));
+  const goTo = n => { el.scrollLeft = (n - min) * MP_ITEM; paint(n); };
+  el.addEventListener('scroll', () => {
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      const n = clamp(Math.round(el.scrollLeft / MP_ITEM) + min);
+      paint(n);
+      if (!lock) onSet(n);
+    });
   });
-  c.querySelector('[data-parminus]').onclick = () => { active.pars[i] = Math.max(3, active.pars[i] - 1); refresh(); };
-  c.querySelector('[data-parplus]').onclick = () => { active.pars[i] = Math.min(6, active.pars[i] + 1); refresh(); };
-  c.querySelectorAll('[data-fir] button').forEach(btn => btn.onclick = () => {
-    if (btn.disabled) return;
-    h.fir = h.fir === btn.dataset.f ? null : btn.dataset.f;
-    refresh();
+  goTo(clamp(initVal));
+  requestAnimationFrame(() => { lock = false; });
+  return { set: n => { lock = true; goTo(clamp(n)); requestAnimationFrame(() => { lock = false; }); } };
+}
+
+// --- Editor del hoyo activo ---
+function renderEditor() {
+  const i = selHole, h = active.holes[i], par = active.pars[i];
+  const recv = golfStrokesReceived(active);
+  const stb = active.mode === 'stableford';
+  const r = recv[i];
+  const dots = (stb && r > 0) ? `<div class="hdots" title="${r} golpe(s) que da el hándicap aquí">${'•'.repeat(r)}</div>` : '';
+  const meta2 = (!stb && active.si && active.si[i]) ? `<div class="hcp none">índice ${active.si[i]}</div>` : '';
+  const par3 = par <= 3;
+  const calleHtml = `
+    <div class="calle ${par3 ? 'dis' : ''}">
+      <div class="clab">Salida (calle)</div>
+      <div class="segc">
+        <button data-fir="left" class="miss ${h.fir === 'left' ? 'on' : ''}" ${par3 ? 'disabled' : ''}>◄ Izq</button>
+        <button data-fir="hit" class="hit ${h.fir === 'hit' ? 'on' : ''}" ${par3 ? 'disabled' : ''}>Calle ✓</button>
+        <button data-fir="right" class="miss ${h.fir === 'right' ? 'on' : ''}" ${par3 ? 'disabled' : ''}>Dcha ►</button>
+      </div>
+    </div>`;
+  const nums = [];
+  for (let x = PICK_MIN; x <= PICK_MAX; x++) nums.push(`<div class="num tnum" data-x="${x}">${x}</div>`);
+  $('#holeEditor').innerHTML = `
+    <div class="ed-head">
+      <div class="ed-no"><div class="lab">Hoyo</div><div class="n tnum">${holeNo(i)}</div></div>
+      <div class="ed-meta"><div class="par"><b>Par ${par}</b></div>${dots}${meta2}</div>
+      <div class="${girClass(i)}" id="girBadge" title="Green en regulación">GIR</div>
+      <div class="ed-score">${scoreRightHtml(i, recv)}</div>
+    </div>
+    <div class="pick-lab">Golpes</div>
+    <div class="hpick-wrap"><div class="hpick-sel"></div><div class="hpick" id="hpick">${nums.join('')}</div></div>
+    <div class="pick-hint"><span>‹ desliza el número ›</span></div>
+    <div class="sub-fields">
+      <div class="sub"><span class="k">Putts</span>${miniPickerHtml('puttsPick', 0, 6)}</div>
+      <div class="sub"><span class="k">Penal.</span>${miniPickerHtml('penalPick', 0, 5)}</div>
+    </div>
+    ${calleHtml}
+    <div class="ed-nav"></div>`;
+
+  const ed = $('#holeEditor');
+  const rhc = $('#rhCur'); if (rhc) rhc.textContent = 'Hoyo ' + holeNo(i);
+  pickEl = $('#hpick');
+  const startNum = Math.min(PICK_MAX, Math.max(PICK_MIN, h.strokes || par));
+  pickLock = true;
+  pickEl.scrollLeft = (startNum - PICK_MIN) * PICK_ITEM;
+  paintPick(startNum);
+  requestAnimationFrame(() => { pickLock = false; });
+  pickEl.addEventListener('scroll', onPickScroll);
+
+  ed.querySelectorAll('[data-x]').forEach(nEl => nEl.onclick = () => {
+    const x = +nEl.dataset.x; pickLock = true;
+    pickEl.scrollTo({ left: (x - PICK_MIN) * PICK_ITEM, behavior: 'smooth' });
+    setScore(x); setTimeout(() => { pickLock = false; }, 350);
   });
-  return c;
+  puttsMP = wireMiniPicker('puttsPick', 0, 6, h.putts || 0, v => {
+    const maxP = Math.max(0, (active.holes[i].strokes || 0) - 1); // putts nunca ≥ golpes
+    const c = Math.min(v, maxP);
+    active.holes[i].putts = c;
+    if (c !== v) puttsMP.set(c);
+    updateGir(); markDirty();
+  });
+  wireMiniPicker('penalPick', 0, 5, h.pen || 0, v => { active.holes[i].pen = v; markDirty(); });
+  ed.querySelectorAll('[data-fir]').forEach(b => b.onclick = () => {
+    if (par3) return;
+    active.holes[i].fir = active.holes[i].fir === b.dataset.fir ? null : b.dataset.fir;
+    ed.querySelectorAll('[data-fir]').forEach(x => x.classList.toggle('on', x.dataset.fir === active.holes[i].fir));
+    markDirty();
+  });
+  updateNav();
+}
+
+// Barra Anterior/Siguiente. Si están TODOS los hoyos apuntados, "Siguiente" pasa a "Guardar partida".
+function updateNav() {
+  const nav = $('#holeEditor .ed-nav'); if (!nav) return;
+  const i = selHole, last = active.holes.length - 1;
+  const allDone = active.holes.every(x => x.strokes > 0);
+  nav.innerHTML = `
+    <button data-nav="-1" ${i === 0 ? 'disabled' : ''}>‹ Anterior</button>
+    ${allDone
+      ? `<button class="next save" data-save>Guardar partida ✓</button>`
+      : `<button class="next" data-nav="1" ${i === last ? 'disabled' : ''}>Siguiente hoyo ›</button>`}`;
+  nav.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => {
+    selHole = Math.max(0, Math.min(last, selHole + (+b.dataset.nav)));
+    renderEditor(); highlightSel();
+  });
+  const sb = nav.querySelector('[data-save]');
+  if (sb) sb.onclick = saveRound;
+}
+
+function paintPick(centerNum) {
+  if (!pickEl) return;
+  const par = active.pars[selHole];
+  pickEl.querySelectorAll('.num').forEach(nEl => {
+    const x = +nEl.dataset.x, mid = x === centerNum;
+    nEl.classList.toggle('mid', mid);
+    nEl.style.color = mid ? scoreColor(x, par) : '';
+  });
+}
+function onPickScroll() {
+  if (pickRaf) cancelAnimationFrame(pickRaf);
+  pickRaf = requestAnimationFrame(() => {
+    const idx = Math.round(pickEl.scrollLeft / PICK_ITEM);
+    const num = Math.max(PICK_MIN, Math.min(PICK_MAX, idx + PICK_MIN));
+    paintPick(num);
+    if (!pickLock) setScore(num);
+  });
+}
+// Fija el golpe sin reconstruir el selector (para no cortar el gesto de deslizar).
+function setScore(x) {
+  const i = selHole, h = active.holes[i];
+  if (h.strokes === x) { paintPick(x); return; }
+  h.strokes = x;
+  if (h.putts > x - 1) h.putts = Math.max(0, x - 1);
+  paintPick(x);
+  const recv = golfStrokesReceived(active);
+  const right = $('#holeEditor').querySelector('.ed-score');
+  if (right) right.innerHTML = scoreRightHtml(i, recv);
+  updateGir();
+  if (puttsMP) puttsMP.set(h.putts || 0);
+  updateNav(); // por si al apuntar este hoyo ya están todos → "Guardar partida"
+  renderScorecard();
+  updateTotals();
+  markDirty();
 }
 
 function markDirty() { active.dirty = true; save(LS.active, active); }
 
-// En Medal play la casilla "Golpes" se puede tocar para verla "como si jugara en Stableford".
-// El toggle es solo visual/informativo: el resultado real de Medal siguen siendo los golpes puros.
-let strokesShowStb = false;
-$('#cellStrokes').onclick = () => {
-  if (!active || active.mode === 'stableford') return; // en Stableford ya hay casilla Puntos propia
-  strokesShowStb = !strokesShowStb;
-  updateTotals();
-};
-
+// Totales de arriba. En Stableford el hero es Puntos; en Medal, los Golpes totales.
+// Junto al hero: Vs Par personal (con los golpes del hándicap) y Vs Par del campo.
 function updateTotals() {
+  if (!active) return;
   const t = roundTotals(active);
-  const showStb = active && active.mode !== 'stableford' && strokesShowStb;
-  $('#cellStrokes').classList.toggle('show-stb', !!showStb);
-  $('#tkStrokes').textContent = showStb ? 'Stableford' : 'Golpes';
-  $('#tStrokes').textContent = showStb ? (t.stb || 0) : (t.strokes || 0);
-  $('#tVsPar').textContent = fmtVsPar(t.vsPar);
-  $('#tVsPar').style.color = t.vsPar < 0 ? 'var(--birdie)' : t.vsPar > 0 ? 'var(--bogey)' : 'var(--text)';
-  $('#tPutts').textContent = t.putts || 0;
-  $('#tFir').textContent = t.firPoss ? t.firPct + '%' : '–';
-  $('#tGir').textContent = t.girPoss ? t.girPct + '%' : '–';
-  $('#tPts').textContent = t.stb || 0;
+  const recv = golfStrokesReceived(active);
+  const stb = active.mode === 'stableford';
+  const hasHcp = (active.hcp || 0) > 0;
+  let vsYo = 0;
+  active.holes.forEach((h, i) => { if (h.strokes > 0) vsYo += h.strokes - (active.pars[i] + recv[i]); });
+  const cells = [];
+  cells.push(`<div class="ts-cell hero"><div class="tk">${stb ? 'Puntos' : 'Golpes'}</div><div class="tv tnum">${stb ? t.stb : (t.strokes || 0)}</div></div>`);
+  if (hasHcp) cells.push(`<div class="ts-cell"><div class="tk">Vs Par<small>yo · hcp ${fmtHcp(active.hcp)}</small></div><div class="tv tnum" style="color:${vsColor(vsYo)}">${fmtVsPar(vsYo)}</div></div>`);
+  cells.push(`<div class="ts-cell"><div class="tk">Vs Par<small>campo</small></div><div class="tv tnum" style="color:${vsColor(t.vsPar)}">${fmtVsPar(t.vsPar)}</div></div>`);
+  $('#totstrip').innerHTML = cells.join('');
 }
 function fmtHcp(h) { return Number.isInteger(h) ? String(h) : String(h).replace('.', ','); }
 
-$('#btnFinish').onclick = () => {
+function saveRound() {
   const t = roundTotals(active);
   if (!t.played) { toast('Apunta al menos un hoyo'); return; }
   const rec = JSON.parse(JSON.stringify(active));
@@ -337,16 +395,52 @@ $('#btnFinish').onclick = () => {
   active = null; localStorage.removeItem(LS.active);
   toast('Ronda guardada ✓');
   closeRound('historial');
-};
+}
+$('#btnFinish').onclick = saveRound;
 $('#btnBackRound').onclick = () => {
   if (active && active.dirty && !active.saved) {
     if (!confirm('¿Salir sin guardar? Se conservará como borrador en curso.')) return;
   }
   closeRound();
 };
-$('#holePrev').onclick = () => goHole(-1);
-$('#holeNext').onclick = () => goHole(1);
-document.querySelector('.rb-hole').onclick = openScoreSheet; // tocar el hoyo reabre la hoja
+$('#roundHandle').onclick = openRoundSheet;
+$('#rsBackdrop').onclick = closeRoundSheet;
+$('#rsClose').onclick = closeRoundSheet;
+
+// Arrastrar hacia arriba en la barra inferior para abrir el panel.
+(function initHandleDrag() {
+  const bar = $('#roundBar');
+  if (!bar) return;
+  let startY = null, opened = false;
+  bar.addEventListener('touchstart', e => { startY = e.touches[0].clientY; opened = false; }, { passive: true });
+  bar.addEventListener('touchmove', e => {
+    if (startY == null || opened) return;
+    if (e.touches[0].clientY - startY < -24) { opened = true; openRoundSheet(); } // arrastrado hacia arriba
+  }, { passive: true });
+  bar.addEventListener('touchend', () => { startY = null; }, { passive: true });
+})();
+
+// Arrastrar el panel hacia abajo para cerrarlo (desde arriba del panel, sin scroll).
+(function initSheetDrag() {
+  const panel = $('#rsPanel');
+  if (!panel) return;
+  let startY = null, dy = 0;
+  panel.addEventListener('touchstart', e => {
+    if (panel.scrollTop > 0) { startY = null; return; } // solo si está arriba del todo
+    startY = e.touches[0].clientY; dy = 0;
+  }, { passive: true });
+  panel.addEventListener('touchmove', e => {
+    if (startY == null) return;
+    dy = e.touches[0].clientY - startY;
+    if (dy > 0) { panel.style.transition = 'none'; panel.style.transform = 'translateY(' + dy + 'px)'; }
+  }, { passive: true });
+  panel.addEventListener('touchend', () => {
+    if (startY == null) return;
+    panel.style.transition = ''; panel.style.transform = '';
+    if (dy > 90) closeRoundSheet();   // umbral: arrastrado lo suficiente → cerrar
+    startY = null; dy = 0;
+  });
+})();
 
 /* ---------- Course modal ---------- */
 function openCourseModal(course, prefill) {

@@ -15,12 +15,12 @@
     --line: #e3e3e9;
     --line-strong: #d2d2dc;
     --shadow: 0 1px 2px rgba(20,20,40,.05), 0 8px 24px rgba(20,20,40,.06);
-    /* scoring (convención tarjeta: bajo par rojo, sobre par azul) */
-    --eagle: #b07d1f;
-    --birdie: #cf3d3d;
+    /* scoring — paleta estilo PGA Tour (bajo par rojo, sobre par en azules) */
+    --eagle: #c69214;
+    --birdie: #d93a3a;
     --par: var(--text);
-    --bogey: #3a72bd;
-    --double: #6a4bb0;
+    --bogey: #2e6db4;
+    --double: #1d3e70;
     --good: #2b9160;
     --warn: #c9821f;
     --bad: #cf3d3d;
@@ -35,7 +35,10 @@
     margin: 0; background: var(--bg); color: var(--text);
     font-family: var(--font); -webkit-font-smoothing: antialiased;
     line-height: 1.4; font-size: 16px;
+    touch-action: manipulation; /* sin zoom al hacer doble toque (mantiene el pinch-zoom) */
+    overscroll-behavior: none;  /* sin rebote elástico */
   }
+  html { overscroll-behavior: none; touch-action: manipulation; }
   .tnum { font-variant-numeric: tabular-nums; }
   button { font-family: inherit; cursor: pointer; }
   .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px calc(96px + env(safe-area-inset-bottom)); }
@@ -181,35 +184,6 @@
   .totbar .tk { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; }
   .totbar .tv { font-size: 19px; font-weight: 800; letter-spacing: -.02em; margin-top: 1px; }
 
-  /* Visor del hoyo (satélite) */
-  #holeView { position: relative; z-index: 0; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--line); }
-  #holeMap { width: 100%; height: 52vh; min-height: 300px; background: #2a3b30; z-index: 0; }
-  .hv-info {
-    position: absolute; left: 0; right: 0; bottom: 0; z-index: 400; pointer-events: none;
-    display: flex; align-items: baseline; gap: 12px; padding: 22px 16px 12px;
-    background: linear-gradient(to top, rgba(6,18,12,.82), rgba(6,18,12,0));
-  }
-  .hv-info #hvTitle { color: #fff; font-weight: 900; font-size: 20px; letter-spacing: -.02em; text-shadow: 0 1px 6px rgba(0,0,0,.5); }
-  .hv-dist { margin-left: auto; color: #fff; font-weight: 800; font-size: 17px; letter-spacing: -.01em;
-    background: rgba(12,20,16,.55); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
-    padding: 5px 12px; border-radius: 999px; text-shadow: 0 1px 4px rgba(0,0,0,.4); }
-  .hv-dist:empty { display: none; }
-
-  /* Hoja de resultados (sube sola al cambiar de hoyo) */
-  .sheet-bg { position: fixed; inset: 0; z-index: 45; background: rgba(8,16,12,.35);
-    display: grid; align-items: end; justify-items: center; opacity: 0; transition: opacity .2s; }
-  .sheet-bg.show { opacity: 1; }
-  .sheet {
-    width: 100%; max-width: 720px; background: var(--surface); border-radius: 22px 22px 0 0;
-    box-shadow: 0 -12px 40px rgba(0,0,0,.32); padding: 8px 4px calc(14px + env(safe-area-inset-bottom));
-    transform: translateY(100%); transition: transform .24s cubic-bezier(.2,.8,.2,1);
-    max-height: 88vh; overflow-y: auto;
-  }
-  .sheet-bg.show .sheet { transform: translateY(0); }
-  .sheet-grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line-strong); margin: 6px auto 2px; }
-  .sheet .hole { border: 0; box-shadow: none; margin: 0; }
-  .sheet-confirm { width: calc(100% - 28px); margin: 4px 14px 0; padding: 15px; }
-
   .hole {
     background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
     box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden;
@@ -264,22 +238,6 @@
     border-top: 1px solid var(--line); padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
   }
   .bottombar-in { max-width: 720px; margin: 0 auto; display: flex; gap: 10px; }
-
-  /* Barra de ronda: navegador de hoyos (estilo HOLE19) + Salir/Guardar */
-  .roundbar-in { max-width: 720px; margin: 0 auto; display: flex; align-items: center; gap: 8px; }
-  .rb-side { flex: none; border: 0; border-radius: 11px; padding: 11px 12px; font-weight: 800; font-size: 13px; letter-spacing: -.01em; }
-  #btnBackRound.rb-side { background: var(--surface); color: var(--text); border: 1px solid var(--line-strong); }
-  .rb-side.save { background: var(--indigo); color: #fff; }
-  .rb-side:active { transform: scale(.97); }
-  .rb-nav { flex: none; width: 40px; height: 46px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--indigo); font-size: 26px; font-weight: 800; line-height: 1; display: grid; place-items: center; }
-  .rb-nav:active { background: var(--surface-2); }
-  .rb-nav:disabled { opacity: .3; }
-  .rb-hole { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 9px; }
-  .rb-flag { width: 20px; height: 24px; flex: none; color: var(--indigo); }
-  .rb-no { font-size: 30px; font-weight: 900; letter-spacing: -.03em; line-height: 1; }
-  .rb-meta { display: flex; flex-direction: column; gap: 1px; line-height: 1.2; }
-  .rb-meta span { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
-  .rb-meta b { color: var(--text); font-weight: 800; font-size: 13px; }
   .btn {
     flex: 1; border: 0; border-radius: 12px; padding: 15px; font-weight: 800; font-size: 16px; letter-spacing: -.01em;
     background: var(--indigo); color: #fff;
@@ -497,3 +455,178 @@
   .yo-item .ico svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
   .yo-item.danger { color: var(--bad); } .yo-item.danger .ico { color: var(--bad); }
   .yo-item .chev { margin-left: auto; color: var(--line-strong); font-size: 20px; }
+
+  /* ===== Pantalla de ronda: totales + tarjeta + editor ===== */
+  .totstrip { display: flex; gap: 6px; margin: 2px 2px 12px; }
+  .totstrip .ts-cell { flex: 1; text-align: center; padding: 8px 4px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+  .totstrip .ts-cell.hero { background: var(--indigo); border-color: transparent; color: #fff; }
+  .totstrip .tk { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 700; line-height: 1.2; }
+  .totstrip .ts-cell.hero .tk { color: rgba(255,255,255,.85); }
+  .totstrip .tk small { display: block; font-size: 9px; letter-spacing: 0; text-transform: none; opacity: .85; font-weight: 600; }
+  .totstrip .tv { font-size: 22px; font-weight: 800; letter-spacing: -.02em; margin-top: 2px; }
+
+  .sc-card { margin: 0 2px 14px; }
+  .sc-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 12px; }
+  .sc { border-collapse: collapse; width: 100%; font-size: 13px; background: var(--surface); }
+  .sc th, .sc td { border: 1px solid var(--line); padding: 0; text-align: center; }
+  .sc .rh { text-align: left; padding: 5px 8px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; position: sticky; left: 0; z-index: 1; background: var(--surface); font-weight: 700; }
+  .sc thead th { background: var(--indigo); color: #fff; font-weight: 800; padding: 5px 0; min-width: 30px; }
+  .sc thead .rh { background: var(--indigo); color: #fff; }
+  .sc .par td { color: var(--muted); padding: 4px 0; font-weight: 600; }
+  .sc .mypar td { color: var(--indigo-deep); padding: 4px 0; font-weight: 700; }
+  .sc .mypar .rh { color: var(--indigo-deep); }
+  .sc .pts td { color: var(--indigo); padding: 4px 0; font-weight: 700; font-size: 12px; }
+  .sc .tot { background: var(--surface-2); font-weight: 800; }
+  .sc th.subhead { background: var(--indigo-deep); color: #fff; font-weight: 800; letter-spacing: .03em; font-size: 10px; }
+  .sc .subtot { background: color-mix(in srgb, var(--indigo) 12%, var(--surface-2)); }
+  .sc td.go { padding: 3px; }
+  .sc td.go button { width: 100%; min-width: 26px; height: 30px; border: 0; background: transparent; border-radius: 7px; font-weight: 800; font-size: 14px; font-family: inherit; font-variant-numeric: tabular-nums; color: var(--line-strong); }
+  .sc td.go button.has { color: #fff; }
+  .sc td.go button.sel { outline: 2.5px solid var(--indigo); outline-offset: -2px; }
+  .sc-hint { text-align: center; font-size: 11px; color: var(--muted); padding: 7px 0 0; }
+
+  .hole-editor { margin: 0 2px 8px; padding: 4px 2px 0; }
+  .hole-editor .ed-head { display: flex; align-items: center; gap: 12px; padding: 6px 4px 4px; position: relative; }
+  .hole-editor .ed-no { text-align: center; line-height: 1; }
+  .hole-editor .ed-no .lab { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+  .hole-editor .ed-no .n { font-size: 62px; font-weight: 800; letter-spacing: -.03em; }
+  .hole-editor .ed-meta { line-height: 1.35; }
+  .hole-editor .ed-meta .par { font-size: 14px; color: var(--muted); }
+  .hole-editor .ed-meta .par b { color: var(--text); }
+  .hole-editor .ed-meta .hdots { color: var(--indigo); font-size: 24px; line-height: 1; letter-spacing: 3px; margin-top: 3px; }
+  .hole-editor .ed-meta .hcp.none { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .hole-editor .gir-circle { position: absolute; left: 60%; top: 50%; transform: translate(-50%, -50%); width: 60px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 800; letter-spacing: .03em; box-shadow: var(--shadow); }
+  .hole-editor .gir-circle.yes { background: var(--good); }
+  .hole-editor .gir-circle.no { background: var(--birdie); }
+  .hole-editor .gir-circle.hidden { display: none; }
+  .hole-editor .ed-score { margin-left: auto; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .hole-editor .ed-score .chip { font-size: 12px; font-weight: 700; color: #fff; border-radius: 999px; padding: 3px 12px; }
+  .hole-editor .ed-score .hpts { font-size: 11px; color: var(--muted); }
+  .hole-editor .ed-score .hpts b { color: var(--indigo); font-size: 13px; }
+
+  .hole-editor .pick-lab { text-align: center; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; font-weight: 700; margin: 6px 0 -2px; }
+  .hole-editor .hpick-wrap { position: relative; }
+  .hole-editor .hpick-wrap::before, .hole-editor .hpick-wrap::after { content: ""; position: absolute; top: 0; bottom: 0; width: 56px; z-index: 3; pointer-events: none; }
+  .hole-editor .hpick-wrap::before { left: 0; background: linear-gradient(90deg, var(--bg), transparent); }
+  .hole-editor .hpick-wrap::after { right: 0; background: linear-gradient(270deg, var(--bg), transparent); }
+  .hole-editor .hpick-sel { position: absolute; top: 12px; bottom: 12px; left: 50%; width: 60px; transform: translateX(-50%); border-radius: 15px; background: color-mix(in srgb, var(--indigo) 10%, transparent); border: 2px solid var(--indigo); z-index: 1; pointer-events: none; }
+  .hole-editor .hpick { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding: 12px calc(50% - 32px); position: relative; z-index: 2; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .hole-editor .hpick::-webkit-scrollbar { display: none; }
+  .hole-editor .hpick .num { flex: 0 0 64px; height: 60px; scroll-snap-align: center; display: grid; place-items: center; font-size: 32px; font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; opacity: .45; transition: opacity .12s, transform .12s; }
+  .hole-editor .hpick .num.mid { opacity: 1; transform: scale(1.18); }
+  .hole-editor .pick-hint { text-align: center; font-size: 11px; color: var(--muted); margin-top: -2px; }
+
+  .hole-editor .sub-fields { display: flex; gap: 10px; margin-top: 10px; }
+  .hole-editor .sub { flex: 1 1 0; min-width: 0; overflow: hidden; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 7px 12px; display: flex; align-items: center; justify-content: space-between; }
+  .hole-editor .sub .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 700; }
+  .hole-editor .sub .stp { display: flex; align-items: center; gap: 12px; }
+  .hole-editor .sub .stp button { width: 30px; height: 30px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 8px; color: var(--indigo); font-size: 18px; font-family: inherit; font-weight: 700; }
+  .hole-editor .sub .stp .v { font-weight: 800; font-size: 16px; min-width: 14px; text-align: center; }
+  /* mini-selector deslizable (putts/penal), estilo Golpes pero compacto */
+  .hole-editor .sub .mpick-wrap { position: relative; flex: 1; min-width: 0; margin-left: 8px; overflow: hidden; }
+  .hole-editor .sub .mpick-sel { position: absolute; top: 1px; bottom: 1px; left: 50%; width: 30px; transform: translateX(-50%); border-radius: 8px; background: color-mix(in srgb, var(--indigo) 12%, transparent); border: 1.5px solid var(--indigo); pointer-events: none; }
+  .hole-editor .sub .mpick { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding: 1px calc(50% - 17px); scrollbar-width: none; touch-action: pan-x; position: relative; z-index: 1; }
+  .hole-editor .sub .mpick::-webkit-scrollbar { display: none; }
+  .hole-editor .sub .mpick .mnum { flex: 0 0 34px; height: 26px; scroll-snap-align: center; display: grid; place-items: center; font-weight: 800; font-size: 16px; color: var(--muted); opacity: .45; font-variant-numeric: tabular-nums; }
+  .hole-editor .sub .mpick .mnum.mid { opacity: 1; color: var(--text); }
+
+  .hole-editor .calle { margin-top: 10px; }
+  .hole-editor .calle .clab { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 700; margin-bottom: 5px; }
+  .hole-editor .calle .segc { display: flex; gap: 8px; }
+  .hole-editor .calle .segc button { flex: 1; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--muted); border-radius: 12px; padding: 11px 4px; font-size: 13px; font-weight: 700; font-family: inherit; }
+  .hole-editor .calle .segc button.on.hit { background: var(--good); border-color: transparent; color: #fff; }
+  .hole-editor .calle .segc button.on.miss { background: var(--birdie); border-color: transparent; color: #fff; }
+  .hole-editor .calle.dis { opacity: .45; }
+  .hole-editor .calle.dis .clab::after { content: " — no aplica en par 3"; }
+
+  .hole-editor .ed-nav { display: flex; gap: 10px; padding: 14px 0 6px; }
+  .hole-editor .ed-nav button { flex: 1; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); border-radius: 12px; padding: 12px; font-weight: 700; font-size: 14px; font-family: inherit; }
+  .hole-editor .ed-nav button.next { background: var(--indigo); color: #fff; border-color: transparent; flex: 1.7; }
+  .hole-editor .ed-nav button:disabled { opacity: .4; }
+
+  /* ==== La pantalla de ronda encaja en el viewport (sin scroll de página) ==== */
+  #viewRound {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 24;
+    height: 100vh; height: 100dvh; max-height: 100dvh;
+    display: flex; flex-direction: column; overflow: hidden;
+    background: var(--bg);
+    padding: 6px 14px calc(50px + env(safe-area-inset-bottom));
+    overscroll-behavior: none;
+  }
+  /* los scrollers horizontales no arrastran ni rebotan en vertical */
+  #viewRound .sc-wrap { overscroll-behavior: contain; touch-action: pan-x; }
+  #viewRound .hole-editor .hpick { overscroll-behavior-x: contain; touch-action: pan-x; }
+  #viewRound .round-head { margin: 2px 2px 0; }
+  #viewRound .round-head h1 { font-size: 19px; }
+  #viewRound .round-sub { margin: 1px 2px 7px; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #viewRound .totstrip { margin: 0 0 8px; }
+  #viewRound .totstrip .tv { font-size: 20px; }
+  #viewRound .totstrip .ts-cell { padding: 6px 4px; }
+  #viewRound .sc-card { margin: 0 0 8px; }
+  #viewRound .sc-hint { padding: 4px 0 0; font-size: 10px; }
+
+  #viewRound .hole-editor { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; margin: 0; padding: 0; overflow: hidden; }
+  #viewRound .hole-editor .ed-head { padding: 2px 4px; }
+  #viewRound .hole-editor .ed-no .n { font-size: clamp(36px, 7.2vh, 54px); }
+  #viewRound .hole-editor .ed-meta .hdots { font-size: 20px; margin-top: 1px; }
+  #viewRound .hole-editor .gir-circle { width: 54px; height: 36px; }
+  #viewRound .hole-editor .pick-lab { margin: 2px 0 -2px; }
+  #viewRound .hole-editor .hpick { padding: 8px calc(50% - 32px); }
+  #viewRound .hole-editor .hpick .num { height: 52px; font-size: 28px; }
+  #viewRound .hole-editor .hpick-sel { top: 8px; bottom: 8px; }
+  #viewRound .hole-editor .pick-hint { margin-top: 0; }
+  #viewRound .hole-editor .sub-fields { margin-top: 8px; }
+  #viewRound .hole-editor .sub { padding: 6px 12px; }
+  #viewRound .hole-editor .calle { margin-top: 8px; }
+  #viewRound .hole-editor .calle .segc button { padding: 9px 4px; }
+  #viewRound .hole-editor .ed-nav { margin-top: auto; padding: 10px 0 2px; }
+  .hole-editor .ed-nav button.save { background: var(--good); }
+
+  /* Pantallas bajas: compacta aún más para que no se recorte nada */
+  @media (max-height: 720px) {
+    #viewRound .round-sub { display: none; }
+    #viewRound .sc-hint { display: none; }
+    #viewRound .round-head h1 { font-size: 17px; }
+    #viewRound .totstrip { margin-bottom: 6px; }
+    #viewRound .totstrip .tv { font-size: 18px; }
+    #viewRound .totstrip .ts-cell { padding: 5px 4px; }
+    #viewRound .sc-card { margin-bottom: 6px; }
+    #viewRound .hole-editor .ed-head { padding: 0 4px; }
+    #viewRound .hole-editor .ed-no .n { font-size: clamp(30px, 6vh, 46px); }
+    #viewRound .hole-editor .hpick { padding: 4px calc(50% - 32px); }
+    #viewRound .hole-editor .hpick .num { height: 40px; font-size: 24px; }
+    #viewRound .hole-editor .hpick-sel { top: 4px; bottom: 4px; }
+    #viewRound .hole-editor .pick-hint { display: none; }
+    #viewRound .hole-editor .sub-fields { margin-top: 6px; }
+    #viewRound .hole-editor .sub { padding: 4px 10px; }
+    #viewRound .hole-editor .calle { margin-top: 6px; }
+    #viewRound .hole-editor .calle .clab { margin-bottom: 3px; }
+    #viewRound .hole-editor .calle .segc button { padding: 7px 4px; }
+    #viewRound .hole-editor .ed-nav { padding: 4px 0 0; }
+    /* tarjeta más compacta para dar altura al editor */
+    #viewRound .sc thead th { padding: 3px 0; }
+    #viewRound .sc .rh { padding: 3px 8px; }
+    #viewRound .sc .par td, #viewRound .sc .mypar td, #viewRound .sc .pts td { padding: 2px 0; }
+    #viewRound .sc td.go button { height: 26px; }
+  }
+
+  /* Asa inferior que despliega el panel de hoyos */
+  .round-handle { width: 100%; max-width: 720px; margin: 0 auto; display: flex; align-items: center; justify-content: center; gap: 8px; border: 0; background: transparent; color: var(--text); font-family: inherit; font-weight: 800; font-size: 15px; padding: 4px; letter-spacing: -.01em; }
+  .round-handle .rh-chev { color: var(--indigo); font-size: 12px; }
+
+  /* Panel desplegable (bottom sheet) con todos los hoyos */
+  .round-sheet { position: fixed; inset: 0; z-index: 40; }
+  .round-sheet.hidden { display: none; }
+  .round-sheet .rs-backdrop { position: absolute; inset: 0; background: rgba(10,12,20,.42); opacity: 0; transition: opacity .24s ease; }
+  .round-sheet.open .rs-backdrop { opacity: 1; }
+  .round-sheet .rs-panel { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface); border-radius: 22px 22px 0 0; box-shadow: 0 -8px 40px rgba(20,20,40,.22); padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); transform: translateY(100%); transition: transform .26s cubic-bezier(.32,.72,0,1); max-height: 82vh; overflow-y: auto; }
+  .round-sheet.open .rs-panel { transform: translateY(0); }
+  .round-sheet .rs-grip { display: block; width: 42px; height: 5px; border-radius: 3px; background: var(--line-strong); border: 0; margin: 6px auto 10px; }
+  .round-sheet .rs-title { text-align: center; font-weight: 800; font-size: 15px; margin-bottom: 12px; }
+  .round-sheet .rs-holes { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; margin-bottom: 16px; }
+  .round-sheet .sh-hole { display: flex; flex-direction: column; align-items: center; gap: 3px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 8px 2px 6px; font-family: inherit; }
+  .round-sheet .sh-hole.active { border-color: var(--indigo); border-width: 2px; padding: 7px 1px 5px; }
+  .round-sheet .sh-no { font-size: 11px; color: var(--muted); font-weight: 700; }
+  .round-sheet .sh-score { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--line-strong); font-weight: 800; font-size: 15px; color: var(--line-strong); }
+  .round-sheet .sh-dots { min-height: 13px; color: var(--indigo); font-size: 14px; line-height: 1; letter-spacing: 2px; }
+  .round-sheet .rs-actions { display: flex; gap: 10px; }

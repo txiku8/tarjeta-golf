@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Tarjeta de Golf</title>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
@@ -77,19 +77,12 @@
 <main class="wrap hidden" id="viewRound">
   <div class="round-head"><h1 id="rTitle">Campo</h1></div>
   <p class="round-sub" id="rSub">—</p>
-  <div class="totbar" id="totbar">
-    <div class="tot-pts"><div class="tk">Puntos</div><div class="tv tnum" id="tPts">0</div></div>
-    <div id="cellStrokes"><div class="tk" id="tkStrokes">Golpes</div><div class="tv tnum" id="tStrokes">0</div></div>
-    <div><div class="tk">Vs Par</div><div class="tv tnum" id="tVsPar">E</div></div>
-    <div><div class="tk">Putts</div><div class="tv tnum" id="tPutts">0</div></div>
-    <div><div class="tk">Calles</div><div class="tv tnum" id="tFir">0%</div></div>
-    <div><div class="tk">Greens</div><div class="tv tnum" id="tGir">0%</div></div>
+  <div class="totstrip" id="totstrip"></div>
+  <div class="sc-card">
+    <div class="sc-wrap"><table class="sc" id="scGrid"></table></div>
+    <div class="sc-hint">Toca un hoyo de la tarjeta para editarlo abajo</div>
   </div>
-  <div id="holeView">
-    <div id="holeMap"></div>
-    <div class="hv-info"><span id="hvTitle">Hoyo 1</span><span id="hvDist" class="hv-dist"></span></div>
-  </div>
-  <div id="holes" class="hidden"></div>
+  <div class="hole-editor" id="holeEditor"></div>
 </main>
 
 <button class="map-fab hidden" id="mapFab">
@@ -119,24 +112,22 @@
 </nav>
 
 <div class="bottombar hidden" id="roundBar">
-  <div class="roundbar-in">
-    <button class="rb-side" id="btnBackRound">Salir</button>
-    <button class="rb-nav" id="holePrev" aria-label="Hoyo anterior">‹</button>
-    <div class="rb-hole">
-      <svg class="rb-flag" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M6 4h11l-2.5 3.5L17 11H6z" fill="currentColor"/></svg>
-      <span class="rb-no tnum" id="navHoleNo">1</span>
-      <div class="rb-meta">
-        <span class="rb-par">Par <b id="navHolePar">4</b></span>
-        <span class="rb-si">S.I. <b id="navHoleSi">3</b></span>
-      </div>
-    </div>
-    <button class="rb-nav" id="holeNext" aria-label="Hoyo siguiente">›</button>
-    <button class="rb-side save" id="btnFinish">Guardar</button>
-  </div>
+  <button class="round-handle" id="roundHandle" aria-label="Ver todos los hoyos">
+    <span class="rh-chev">▲</span><span class="rh-cur" id="rhCur">Hoyos</span>
+  </button>
 </div>
 
-<div class="sheet-bg hidden" id="scoreSheetBg">
-  <div class="sheet" id="scoreSheet"></div>
+<div class="round-sheet hidden" id="roundSheet">
+  <div class="rs-backdrop" id="rsBackdrop"></div>
+  <div class="rs-panel" id="rsPanel">
+    <button class="rs-grip" id="rsClose" aria-label="Cerrar"></button>
+    <div class="rs-title">Ir a un hoyo</div>
+    <div class="rs-holes" id="rsHoles"></div>
+    <div class="rs-actions">
+      <button class="btn ghost" id="btnBackRound">‹ Salir</button>
+      <button class="btn" id="btnFinish">Guardar ronda</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
