@@ -394,7 +394,122 @@ function saveRound() {
   save(LS.rounds, rounds);
   active = null; localStorage.removeItem(LS.active);
   toast('Ronda guardada ✓');
-  closeRound('historial');
+  showRoundSummary(rec); // pantalla de estadísticas de la partida
+}
+
+/* ===== Resumen de la partida (una pantalla con el máximo de datos) ===== */
+function showRoundSummary(r) {
+  $('#viewRound').classList.add('hidden');
+  $('#roundBar').classList.add('hidden');
+  $('#roundSheet').classList.add('hidden'); $('#roundSheet').classList.remove('open');
+  $('#tabbar').classList.add('hidden');
+  $('#mapFab').classList.add('hidden');
+  const appHeader = document.querySelector('header.app'); if (appHeader) appHeader.classList.add('hidden');
+  renderSummary(r);
+  $('#viewSummary').classList.remove('hidden');
+  window.scrollTo(0, 0);
+}
+function closeSummary(toTab) {
+  $('#viewSummary').classList.add('hidden');
+  const appHeader = document.querySelector('header.app'); if (appHeader) appHeader.classList.remove('hidden');
+  showTab(toTab || 'historial');
+}
+
+function renderSummary(r) {
+  const t = roundTotals(r);
+  const recv = golfStrokesReceived(r);
+  const stb = r.mode === 'stableford';
+  const hasHcp = (r.hcp || 0) > 0;
+  const hno = i => (r.holeStart || 1) + i;
+  const puttsPer = t.played ? t.putts / t.played : 0;
+
+  // Vs par personal (restando los golpes que da el hándicap)
+  let vsYo = 0;
+  r.holes.forEach((h, i) => { if (h.strokes > 0) vsYo += h.strokes - (r.pars[i] + recv[i]); });
+
+  // Reparto de resultados + detalle de putts + mejor/peor hoyo
+  const dist = { eagle: 0, birdie: 0, par: 0, bogey: 0, double: 0 };
+  let onePutts = 0, threePutts = 0, best = null, bestI = -1;
+  r.holes.forEach((h, i) => {
+    if (!h.strokes) return;
+    const d = h.strokes - r.pars[i];
+    if (d <= -2) dist.eagle++; else if (d === -1) dist.birdie++; else if (d === 0) dist.par++; else if (d === 1) dist.bogey++; else dist.double++;
+    if (h.putts === 1) onePutts++; if (h.putts >= 3) threePutts++;
+    if (best === null || d < best) { best = d; bestI = i; }
+  });
+  const segs = [['Eagle+', dist.eagle, 'var(--eagle)'], ['Birdie', dist.birdie, 'var(--birdie)'],
+    ['Par', dist.par, 'var(--par)'], ['Bogey', dist.bogey, 'var(--bogey)'], ['Doble+', dist.double, 'var(--double)']];
+  const totH = segs.reduce((a, s) => a + s[1], 0) || 1;
+
+  // Parciales Ida (OUT) / Vuelta (IN)
+  const idxs = r.holes.map((_, i) => i);
+  const frontIdx = idxs.filter(i => hno(i) <= 9 && r.holes[i].strokes > 0);
+  const backIdx = idxs.filter(i => hno(i) >= 10 && r.holes[i].strokes > 0);
+  const sub = arr => arr.reduce((a, i) => { a.g += r.holes[i].strokes; a.p += r.pars[i]; return a; }, { g: 0, p: 0 });
+  const showSplit = frontIdx.length > 0 && backIdx.length > 0;
+  const out = sub(frontIdx), inn = sub(backIdx);
+
+  const modeLbl = stb ? 'Stableford' : 'Medal play';
+  const hcpLbl = hasHcp ? ' · hcp ' + fmtHcp(r.hcp) : '';
+
+  const tile = (k, v, s, color) =>
+    `<div class="sum-tile"><div class="k">${k}</div><div class="v tnum"${color ? ` style="color:${color}"` : ''}>${v}${s ? ` <small>${s}</small>` : ''}</div></div>`;
+  const vsChip = (lbl, v) =>
+    `<div class="svs"><span class="k">${lbl}</span><span class="v tnum" style="color:${vsColor(v)}">${fmtVsPar(v)}</span></div>`;
+
+  const bestLbl = best === null ? '—' : scoreLabelTxt(best);
+  const splitRow = (lbl, o) =>
+    `<tr><td class="rh">${lbl}</td><td class="tnum">${o.g}</td><td class="tnum" style="color:${vsColor(o.g - o.p)}">${fmtVsPar(o.g - o.p)}</td></tr>`;
+
+  $('#sumBody').innerHTML = `
+    <div class="sum-top">
+      <div class="sum-badge">Partida guardada ✓</div>
+      <div class="sum-course">${esc(r.courseName)}</div>
+      <div class="sum-meta">${(r.courseLoc ? esc(r.courseLoc) + ' · ' : '')}${fmtDate(r.date)} · ${t.played} hoyos · ${modeLbl}${hcpLbl}</div>
+    </div>
+
+    <div class="sum-hero">
+      <div class="sh-main">
+        <div class="k">${stb ? 'Puntos' : 'Golpes'}</div>
+        <div class="v tnum">${stb ? t.stb : t.strokes}</div>
+        <div class="s">${stb ? t.strokes + ' golpes' : t.stb + ' pts stableford'}</div>
+      </div>
+      <div class="sh-vs">
+        ${vsChip('Vs par campo', t.vsPar)}
+        ${hasHcp ? vsChip('Vs par (hcp)', vsYo) : ''}
+      </div>
+    </div>
+
+    <div class="sum-sec">Resultados</div>
+    <div class="dist-bar">${segs.filter(s => s[1]).map(s => `<span style="width:${(s[1] / totH * 100).toFixed(1)}%;background:${s[2]}"></span>`).join('')}</div>
+    <div class="dist-legend">${segs.map(s => `<span class="dl"><span class="dot" style="background:${s[2]}"></span>${s[0]} <b class="tnum">${s[1]}</b></span>`).join('')}</div>
+
+    <div class="sum-sec">Estadísticas</div>
+    <div class="sum-grid">
+      ${tile('Putts', t.putts, puttsPer.toFixed(2).replace('.', ',') + '/hoyo')}
+      ${tile('Putts / GIR', t.gir ? t.puttsPerGir.toFixed(2).replace('.', ',') : '—', t.gir ? 'en ' + t.gir : 'sin greens')}
+      ${tile('1 putt', onePutts, threePutts + ' de 3+')}
+      ${tile('Calles', t.firPoss ? t.firPct + '%' : '—', t.firPoss ? t.firHit + '/' + t.firPoss : 'par 3')}
+      ${tile('Greens (GIR)', t.girPoss ? t.girPct + '%' : '—', t.gir + '/' + t.girPoss)}
+      ${tile('Scrambling', t.scrPoss ? t.scrPct + '%' : '—', t.scrPoss ? t.scr + '/' + t.scrPoss : 'todos los greens')}
+      ${tile('Penaliz.', t.pen)}
+      ${tile('Mejor hoyo', bestI >= 0 ? 'H' + hno(bestI) : '—', bestLbl, best !== null ? vsColor(best) : null)}
+    </div>
+
+    ${showSplit ? `
+    <div class="sum-sec">Parciales</div>
+    <table class="sum-split">
+      <thead><tr><th class="rh"></th><th>Golpes</th><th>Vs par</th></tr></thead>
+      <tbody>${splitRow('Ida (OUT)', out)}${splitRow('Vuelta (IN)', inn)}</tbody>
+    </table>` : ''}
+
+    <div class="sum-actions">
+      <button class="btn ghost" id="sumCard">Ver tarjeta</button>
+      <button class="btn" id="sumDone">Hecho</button>
+    </div>`;
+
+  $('#sumCard').onclick = () => { $('#viewSummary').classList.add('hidden'); resumeRound(r); };
+  $('#sumDone').onclick = () => closeSummary('historial');
 }
 $('#btnFinish').onclick = saveRound;
 $('#btnBackRound').onclick = () => {

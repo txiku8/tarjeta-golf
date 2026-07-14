@@ -77,19 +77,26 @@ function fmtVsPar(n) { return n === 0 ? 'E' : n > 0 ? '+' + n : String(n); }
 /* ---------- Aggregate stats ---------- */
 function roundTotals(r) {
   let strokes = 0, putts = 0, par = 0, played = 0, firHit = 0, firPoss = 0, gir = 0, girPoss = 0, pen = 0;
+  let scr = 0, scrPoss = 0, girPutts = 0;
   r.holes.forEach((h, i) => {
     const p = r.pars[i];
     if (h.strokes > 0) {
       played++; strokes += h.strokes; putts += h.putts; par += p; pen += h.pen || 0;
-      girPoss++; if (isGir(h, p)) gir++;
+      girPoss++;
+      // Scrambling: green fallado y aun así par o mejor. Putts por GIR: solo cuentan los greens cogidos,
+      // porque los putts totales premian fallar el green y chipear cerca.
+      if (isGir(h, p)) { gir++; girPutts += h.putts; }
+      else { scrPoss++; if (h.strokes - p <= 0) scr++; }
       if (p >= 4) { firPoss++; if (h.fir === 'hit') firHit++; }
     }
   });
   return { strokes, putts, par, played, vsPar: strokes - par,
-    firHit, firPoss, gir, girPoss, pen,
+    firHit, firPoss, gir, girPoss, pen, scr, scrPoss, girPutts,
     stb: stablefordPoints(r),
     firPct: firPoss ? Math.round(firHit / firPoss * 100) : 0,
-    girPct: girPoss ? Math.round(gir / girPoss * 100) : 0 };
+    girPct: girPoss ? Math.round(gir / girPoss * 100) : 0,
+    scrPct: scrPoss ? Math.round(scr / scrPoss * 100) : 0,
+    puttsPerGir: gir ? girPutts / gir : 0 };
 }
 
 // Reparte el HÁNDICAP DE JUEGO total de la ronda (r.hcp, ya calculado con la tabla de slope y ya
