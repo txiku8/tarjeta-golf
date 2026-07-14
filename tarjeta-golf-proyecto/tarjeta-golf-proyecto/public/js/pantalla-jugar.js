@@ -522,7 +522,7 @@ function renderSummary(r) {
 
     <div class="sum-actions">
       <button class="btn ghost" id="sumCard">Ver tarjeta</button>
-      <button class="btn" id="sumDone">Hecho</button>
+      <button class="btn" id="sumDone">Atrás</button>
     </div>`;
 
   $('#sumCard').onclick = () => showRoundCard(r, () => $('#viewSummary').classList.remove('hidden'));
