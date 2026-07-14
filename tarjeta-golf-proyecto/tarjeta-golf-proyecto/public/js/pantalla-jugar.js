@@ -664,7 +664,8 @@ function loadDemo() {
       remaining -= d;
       const strokes = Math.max(2, pars[i] + d);
       let putts = d <= 0 ? 2 : (Math.random() < 0.5 ? 2 : 3);
-      if (d < 0 && Math.random() < 0.4) putts = 1;
+      // 1 putt también en algunos pares: green fallado, chip cerca y embocado (up & down).
+      if (d <= 0 && Math.random() < 0.35) putts = 1;
       putts = Math.max(1, Math.min(putts, strokes - 1));
       holes[i].strokes = strokes; holes[i].putts = putts;
       if (pars[i] >= 4) { const r = Math.random(); holes[i].fir = r < 0.55 ? 'hit' : (r < 0.78 ? 'left' : 'right'); }
