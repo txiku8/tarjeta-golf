@@ -341,7 +341,8 @@ function updateNav() {
 }
 
 function paintPick(centerNum) {
-  if (!pickEl) return;
+  // `active` puede haberse anulado al guardar mientras el selector seguía deslizándose.
+  if (!pickEl || !active) return;
   const par = active.pars[selHole];
   pickEl.querySelectorAll('.num').forEach(nEl => {
     const x = +nEl.dataset.x, mid = x === centerNum;
@@ -352,6 +353,7 @@ function paintPick(centerNum) {
 function onPickScroll() {
   if (pickRaf) cancelAnimationFrame(pickRaf);
   pickRaf = requestAnimationFrame(() => {
+    if (!pickEl || !active) return; // ronda ya guardada/cerrada: no queda nada que pintar
     const idx = Math.round(pickEl.scrollLeft / PICK_ITEM);
     const num = Math.max(PICK_MIN, Math.min(PICK_MAX, idx + PICK_MIN));
     paintPick(num);
