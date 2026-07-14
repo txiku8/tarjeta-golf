@@ -416,6 +416,7 @@ function saveRound() {
    tocar una ronda del historial. Única diferencia: el botón de la derecha es
    "Hecho" al terminar y "Atrás" cuando se entra desde el historial. */
 function showRoundSummary(r, fromHistory) {
+  document.querySelectorAll('main.tab').forEach(m => m.classList.add('hidden')); // oculta la pestaña activa (p. ej. Historial)
   $('#viewRound').classList.add('hidden');
   $('#roundBar').classList.add('hidden');
   $('#roundSheet').classList.add('hidden'); $('#roundSheet').classList.remove('open');
