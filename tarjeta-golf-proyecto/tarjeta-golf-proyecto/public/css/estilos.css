@@ -680,19 +680,35 @@
   .tk-rot {
     position: absolute; top: 50%; left: 50%; transform-origin: center center;
     display: flex; flex-direction: column; gap: 10px;
-    padding: calc(12px + env(safe-area-inset-top)) 16px calc(12px + env(safe-area-inset-bottom));
+    padding: 12px 16px;
     color: #fff;
     background: radial-gradient(120% 100% at 0% 0%, #17402b 0%, #0f2a1e 34%, #10151d 78%);
   }
-  /* Móvil en vertical: giramos la tarjeta para verla apaisada. */
+  /* Móvil en vertical: giramos la tarjeta 90° para verla apaisada.
+     Al girar, los env(safe-area-*) (que van en coordenadas físicas) se mapean a
+     lados rotados: el notch (arriba físico) cae en la IZQUIERDA del contenido. */
   @media (orientation: portrait) {
     .tk-rot { width: 100vh; height: 100vw; transform: translate(-50%, -50%) rotate(90deg); }
     .tk-rot { width: 100dvh; height: 100dvw; }
+    .tk-rot {
+      padding:
+        calc(12px + env(safe-area-inset-right))
+        calc(16px + env(safe-area-inset-bottom))
+        calc(12px + env(safe-area-inset-left))
+        calc(16px + env(safe-area-inset-top));
+    }
   }
   /* Si el teléfono ya está en horizontal, ocupa la pantalla sin girar. */
   @media (orientation: landscape) {
     .tk-rot { width: 100vw; height: 100vh; transform: translate(-50%, -50%); }
     .tk-rot { width: 100dvw; height: 100dvh; }
+    .tk-rot {
+      padding:
+        calc(12px + env(safe-area-inset-top))
+        calc(16px + env(safe-area-inset-right))
+        calc(12px + env(safe-area-inset-bottom))
+        calc(16px + env(safe-area-inset-left));
+    }
   }
 
   .tk-head { display: flex; align-items: center; gap: 14px; flex: none; }
