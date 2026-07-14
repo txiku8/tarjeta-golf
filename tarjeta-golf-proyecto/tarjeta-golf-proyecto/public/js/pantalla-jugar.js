@@ -412,16 +412,16 @@ function saveRound() {
 }
 
 /* ===== Resumen de la partida (una pantalla con el máximo de datos) =====
-   fromHistory = true cuando se abre al tocar una ronda del historial (no recién
-   guardada): cambia el rótulo superior y añade el botón "Editar". */
-function showRoundSummary(r, fromHistory) {
+   Es la MISMA pantalla que aparece al terminar la partida; también se abre al
+   tocar una ronda del historial. */
+function showRoundSummary(r) {
   $('#viewRound').classList.add('hidden');
   $('#roundBar').classList.add('hidden');
   $('#roundSheet').classList.add('hidden'); $('#roundSheet').classList.remove('open');
   $('#tabbar').classList.add('hidden');
   $('#mapFab').classList.add('hidden');
   const appHeader = document.querySelector('header.app'); if (appHeader) appHeader.classList.add('hidden');
-  renderSummary(r, fromHistory);
+  renderSummary(r);
   $('#viewSummary').classList.remove('hidden');
   window.scrollTo(0, 0);
 }
@@ -431,7 +431,7 @@ function closeSummary(toTab) {
   showTab(toTab || 'historial');
 }
 
-function renderSummary(r, fromHistory) {
+function renderSummary(r) {
   const t = roundTotals(r);
   const recv = golfStrokesReceived(r);
   const stb = r.mode === 'stableford';
@@ -479,7 +479,7 @@ function renderSummary(r, fromHistory) {
 
   $('#sumBody').innerHTML = `
     <div class="sum-top">
-      <div class="sum-badge">${fromHistory ? 'Resumen de la partida' : 'Partida guardada ✓'}</div>
+      <div class="sum-badge">Partida guardada ✓</div>
       <div class="sum-course">${esc(r.courseName)}</div>
       <div class="sum-meta">${(r.courseLoc ? esc(r.courseLoc) + ' · ' : '')}${fmtDate(r.date)} · ${t.played} hoyos · ${modeLbl}${hcpLbl}</div>
     </div>
@@ -522,13 +522,10 @@ function renderSummary(r, fromHistory) {
 
     <div class="sum-actions">
       <button class="btn ghost" id="sumCard">Ver tarjeta</button>
-      ${fromHistory ? '<button class="btn ghost" id="sumEdit">Editar</button>' : ''}
-      <button class="btn" id="sumDone">${fromHistory ? 'Volver' : 'Hecho'}</button>
+      <button class="btn" id="sumDone">Hecho</button>
     </div>`;
 
   $('#sumCard').onclick = () => showRoundCard(r, () => $('#viewSummary').classList.remove('hidden'));
-  const eb = $('#sumEdit');
-  if (eb) eb.onclick = () => { $('#viewSummary').classList.add('hidden'); resumeRound(r); };
   $('#sumDone').onclick = () => closeSummary('historial');
 }
 
