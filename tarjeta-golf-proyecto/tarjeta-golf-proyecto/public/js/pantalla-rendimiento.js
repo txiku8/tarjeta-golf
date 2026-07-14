@@ -10,12 +10,13 @@ function fmtAvgVs(n) {
 // Recorre los hoyos de las rondas para lo que roundTotals no cubre:
 // detalle de putts, sesgo de la salida y rendimiento por par.
 function rendHoleAgg(list) {
-  const a = { onePutt: 0, threePutt: 0, left: 0, right: 0, byPar: new Map() };
+  const a = { onePutt: 0, threePutt: 0, birdie: 0, left: 0, right: 0, byPar: new Map() };
   list.forEach(r => r.holes.forEach((h, i) => {
     if (!h.strokes) return;
     const p = r.pars[i];
     if (h.putts === 1) a.onePutt++;
     if (h.putts >= 3) a.threePutt++;
+    if (h.strokes - p <= -1) a.birdie++;
     if (p >= 4) { if (h.fir === 'left') a.left++; else if (h.fir === 'right') a.right++; }
     const bp = a.byPar.get(p) || { holes: 0, vs: 0 };
     bp.holes++; bp.vs += h.strokes - p;
@@ -31,9 +32,10 @@ function renderRendimiento() {
     a.strokes += t.strokes; a.par += t.par; a.putts += t.putts; a.played += t.played;
     a.firHit += t.firHit; a.firPoss += t.firPoss; a.gir += t.gir; a.girPoss += t.girPoss;
     a.scr += t.scr; a.scrPoss += t.scrPoss; a.girPutts += t.girPutts; a.pen += t.pen;
+    a.sand += t.sand; a.sandPoss += t.sandPoss;
     return a;
   }, { strokes: 0, par: 0, putts: 0, played: 0, firHit: 0, firPoss: 0, gir: 0, girPoss: 0,
-       scr: 0, scrPoss: 0, girPutts: 0, pen: 0 });
+       scr: 0, scrPoss: 0, girPutts: 0, pen: 0, sand: 0, sandPoss: 0 });
   const withHoles = last.filter(r => roundTotals(r).played > 0);
   const puttsPer = agg.played ? (agg.putts / agg.played) : 0;
 
@@ -69,9 +71,11 @@ function renderRendStats(agg, ha, nRounds) {
   box.innerHTML = [
     tile('Greens (GIR)', pct(agg.gir, agg.girPoss), agg.gir + '/' + agg.girPoss),
     tile('Scrambling', agg.scrPoss ? pct(agg.scr, agg.scrPoss) : '—', agg.scrPoss ? agg.scr + '/' + agg.scrPoss : 'todos'),
+    tile('Bunkers', agg.sandPoss ? pct(agg.sand, agg.sandPoss) : '—', agg.sandPoss ? agg.sand + '/' + agg.sandPoss : 'sin datos'),
     tile('Putts / GIR', agg.gir ? (agg.girPutts / agg.gir).toFixed(2).replace('.', ',') : '—', agg.gir ? 'en ' + agg.gir : 'sin greens'),
     tile('1 putt', pct(ha.onePutt, agg.played), holes(ha.onePutt)),
     tile('3 putts', pct(ha.threePutt, agg.played), holes(ha.threePutt)),
+    tile('Birdies+', nRounds ? (ha.birdie / nRounds).toFixed(1).replace('.', ',') : '—', '/ ronda'),
     tile('Penaliz.', nRounds ? (agg.pen / nRounds).toFixed(1).replace('.', ',') : '—', '/ ronda'),
   ].join('');
 }

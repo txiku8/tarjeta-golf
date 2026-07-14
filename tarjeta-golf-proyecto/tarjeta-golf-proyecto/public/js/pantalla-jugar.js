@@ -37,7 +37,7 @@ function renderNearby() {
 }
 
 /* ---------- Rounds ---------- */
-function blankHoles(n) { return Array.from({ length: n }, () => ({ strokes: 0, putts: 0, fir: null, pen: 0 })); }
+function blankHoles(n) { return Array.from({ length: n }, () => ({ strokes: 0, putts: 0, fir: null, pen: 0, bunker: false })); }
 
 function startRound(course, opts) {
   if (active && active.dirty) {
@@ -258,6 +258,12 @@ function renderEditor() {
         <button data-fir="hit" class="hit ${h.fir === 'hit' ? 'on' : ''}" ${par3 ? 'disabled' : ''}>Calle ✓</button>
         <button data-fir="right" class="miss ${h.fir === 'right' ? 'on' : ''}" ${par3 ? 'disabled' : ''}>Dcha ►</button>
       </div>
+    </div>
+    <div class="calle">
+      <div class="clab">Bunker junto al green</div>
+      <div class="segc">
+        <button data-bunker class="sand ${h.bunker ? 'on' : ''}">⛱ Estuve en bunker</button>
+      </div>
     </div>`;
   const nums = [];
   for (let x = PICK_MIN; x <= PICK_MAX; x++) nums.push(`<div class="num tnum" data-x="${x}">${x}</div>`);
@@ -307,6 +313,12 @@ function renderEditor() {
     ed.querySelectorAll('[data-fir]').forEach(x => x.classList.toggle('on', x.dataset.fir === active.holes[i].fir));
     markDirty();
   });
+  const bk = ed.querySelector('[data-bunker]');
+  bk.onclick = () => {
+    active.holes[i].bunker = !active.holes[i].bunker;
+    bk.classList.toggle('on', active.holes[i].bunker);
+    markDirty();
+  };
   updateNav();
 }
 
@@ -492,6 +504,7 @@ function renderSummary(r) {
       ${tile('Calles', t.firPoss ? t.firPct + '%' : '—', t.firPoss ? t.firHit + '/' + t.firPoss : 'par 3')}
       ${tile('Greens (GIR)', t.girPoss ? t.girPct + '%' : '—', t.gir + '/' + t.girPoss)}
       ${tile('Scrambling', t.scrPoss ? t.scrPct + '%' : '—', t.scrPoss ? t.scr + '/' + t.scrPoss : 'todos los greens')}
+      ${tile('Bunkers', t.sandPoss ? t.sandPct + '%' : '—', t.sandPoss ? t.sand + '/' + t.sandPoss : 'ninguno')}
       ${tile('Penaliz.', t.pen)}
       ${tile('Mejor hoyo', bestI >= 0 ? 'H' + hno(bestI) : '—', bestLbl, best !== null ? vsColor(best) : null)}
     </div>
@@ -508,8 +521,106 @@ function renderSummary(r) {
       <button class="btn" id="sumDone">Hecho</button>
     </div>`;
 
-  $('#sumCard').onclick = () => { $('#viewSummary').classList.add('hidden'); resumeRound(r); };
+  $('#sumCard').onclick = () => showRoundCard(r, () => $('#viewSummary').classList.remove('hidden'));
   $('#sumDone').onclick = () => closeSummary('historial');
+}
+
+/* ===== Tarjeta apaisada de solo lectura (diseño moderno) =====
+   Se muestra en horizontal: en móvil vertical la tarjeta se gira 90°; si el
+   usuario pone el teléfono en horizontal, ocupa la pantalla sin girar. */
+let cardBack = null; // callback para volver al pulsar cerrar
+function showRoundCard(r, back) {
+  cardBack = back || null;
+  $('#viewSummary').classList.add('hidden');
+  renderRoundCard(r);
+  $('#viewCard').classList.remove('hidden');
+}
+function closeRoundCard() {
+  $('#viewCard').classList.add('hidden');
+  const b = cardBack; cardBack = null;
+  if (b) b(); else closeSummary('historial');
+}
+
+function renderRoundCard(r) {
+  const recv = golfStrokesReceived(r);
+  const stb = r.mode === 'stableford';
+  const t = roundTotals(r);
+  const hno = i => (r.holeStart || 1) + i;
+  const idxs = r.holes.map((_, i) => i);
+  const frontIdx = idxs.filter(i => hno(i) <= 9);
+  const backIdx = idxs.filter(i => hno(i) >= 10);
+  const showOut = frontIdx.length > 0, showIn = backIdx.length > 0, showTot = showOut && showIn;
+  const sumOver = (arr, fn) => arr.reduce((a, i) => a + fn(i), 0);
+  const played = i => r.holes[i].strokes > 0;
+  const pts = i => { const h = r.holes[i]; return h.strokes ? Math.max(0, 2 + (r.pars[i] + recv[i]) - h.strokes) : 0; };
+  const dash = v => v || '–';
+
+  // Inserta las columnas OUT / IN / TOT en una fila. cellFn(i) = celda de un hoyo.
+  const assemble = (cellFn, outVal, inVal, totVal) => {
+    let s = '';
+    frontIdx.forEach(i => s += cellFn(i));
+    if (showOut) s += `<td class="tk-sub tnum">${outVal}</td>`;
+    backIdx.forEach(i => s += cellFn(i));
+    if (showIn) s += `<td class="tk-sub tnum">${inVal}</td>`;
+    if (showTot) s += `<td class="tk-tot tnum">${totVal}</td>`;
+    return s;
+  };
+
+  let head = '<th class="tk-rh"></th>';
+  frontIdx.forEach(i => head += `<th class="tnum">${hno(i)}</th>`);
+  if (showOut) head += `<th class="tk-sub">OUT</th>`;
+  backIdx.forEach(i => head += `<th class="tnum">${hno(i)}</th>`);
+  if (showIn) head += `<th class="tk-sub">IN</th>`;
+  if (showTot) head += `<th class="tk-tot">TOT</th>`;
+
+  const parRow = `<tr class="tk-par"><td class="tk-rh">Par</td>${assemble(
+    i => `<td class="tnum">${r.pars[i]}</td>`,
+    sumOver(frontIdx, i => r.pars[i]), sumOver(backIdx, i => r.pars[i]), sumOver(idxs, i => r.pars[i]))}</tr>`;
+
+  const goRow = `<tr class="tk-go"><td class="tk-rh">Golpes</td>${assemble(
+    i => played(i)
+      ? `<td><span class="tk-ball" style="background:${scoreColor(r.holes[i].strokes, r.pars[i])}">${r.holes[i].strokes}</span></td>`
+      : `<td><span class="tk-ball empty">·</span></td>`,
+    dash(sumOver(frontIdx, i => r.holes[i].strokes || 0)), dash(sumOver(backIdx, i => r.holes[i].strokes || 0)), dash(t.strokes))}</tr>`;
+
+  const puttRow = `<tr class="tk-min"><td class="tk-rh">Putts</td>${assemble(
+    i => `<td class="tnum">${played(i) ? r.holes[i].putts : '·'}</td>`,
+    sumOver(frontIdx, i => r.holes[i].putts || 0), sumOver(backIdx, i => r.holes[i].putts || 0), t.putts)}</tr>`;
+
+  const ptsRow = stb ? `<tr class="tk-min tk-ptsrow"><td class="tk-rh">Pts</td>${assemble(
+    i => `<td class="tnum">${played(i) ? pts(i) : '·'}</td>`,
+    sumOver(frontIdx, pts), sumOver(backIdx, pts), t.stb)}</tr>` : '';
+
+  const modeLbl = stb ? 'Stableford' : 'Medal play';
+  const resultVal = stb ? t.stb : t.strokes;
+  const resultSub = stb ? t.strokes + ' golpes' : t.stb + ' pts';
+
+  const legend = [['Eagle', 'var(--eagle)'], ['Birdie', 'var(--birdie)'], ['Par', 'var(--par)'], ['Bogey', 'var(--bogey)'], ['Doble+', 'var(--double)']];
+
+  $('#cardBody').innerHTML = `
+    <div class="tk-head">
+      <button class="tk-close" id="tkClose" aria-label="Cerrar">✕</button>
+      <div class="tk-title">
+        <div class="tk-name">${esc(r.courseName)}</div>
+        <div class="tk-meta">${fmtDate(r.date)} · ${t.played} hoyos · ${modeLbl}</div>
+      </div>
+      <div class="tk-result">
+        <div class="tk-big tnum">${resultVal}</div>
+        <div class="tk-rblock">
+          <div class="tk-vs tnum" style="color:${vsColor(t.vsPar)}">${fmtVsPar(t.vsPar)}</div>
+          <div class="tk-rsub">${resultSub}</div>
+        </div>
+      </div>
+    </div>
+    <div class="tk-table-wrap">
+      <table class="tk-grid">
+        <thead><tr>${head}</tr></thead>
+        <tbody>${parRow}${goRow}${puttRow}${ptsRow}</tbody>
+      </table>
+    </div>
+    <div class="tk-legend">${legend.map(l => `<span><i style="background:${l[1]}"></i>${l[0]}</span>`).join('')}</div>`;
+
+  $('#tkClose').onclick = closeRoundCard;
 }
 $('#btnFinish').onclick = saveRound;
 $('#btnBackRound').onclick = () => {
@@ -656,7 +767,7 @@ function loadDemo() {
   const rnd = (a, b) => a + Math.random() * (b - a);
   function genRound(course, vsTarget, dateIso) {
     const pars = course.pars, n = pars.length;
-    const holes = pars.map(() => ({ strokes: 0, putts: 0, fir: null, pen: 0 }));
+    const holes = pars.map(() => ({ strokes: 0, putts: 0, fir: null, pen: 0, bunker: false }));
     let remaining = vsTarget;
     for (let i = 0; i < n; i++) {
       let d = Math.round(remaining / (n - i) + rnd(-1, 1.2));
@@ -670,6 +781,8 @@ function loadDemo() {
       holes[i].strokes = strokes; holes[i].putts = putts;
       if (pars[i] >= 4) { const r = Math.random(); holes[i].fir = r < 0.55 ? 'hit' : (r < 0.78 ? 'left' : 'right'); }
       if (Math.random() < 0.08) holes[i].pen = 1;
+      // Bunker solo tiene sentido en hoyos donde se falló el green (los que cuentan para el scrambling).
+      if (!isGir(holes[i], pars[i]) && Math.random() < 0.3) holes[i].bunker = true;
     }
     let guard = 0;
     while (remaining !== 0 && guard++ < 60) {

@@ -536,6 +536,7 @@
   .hole-editor .calle .segc button { flex: 1; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--muted); border-radius: 12px; padding: 11px 4px; font-size: 13px; font-weight: 700; font-family: inherit; }
   .hole-editor .calle .segc button.on.hit { background: var(--good); border-color: transparent; color: #fff; }
   .hole-editor .calle .segc button.on.miss { background: var(--birdie); border-color: transparent; color: #fff; }
+  .hole-editor .calle .segc button.on.sand { background: var(--eagle); border-color: transparent; color: #fff; }
   .hole-editor .calle.dis { opacity: .45; }
   .hole-editor .calle.dis .clab::after { content: " — no aplica en par 3"; }
 
@@ -667,3 +668,66 @@
   .sum-actions { display: flex; gap: 10px; margin: 22px 0 8px; }
   .sum-actions .btn { flex: 1; padding: 15px; }
   .sum-actions .btn.ghost { flex: 1; }
+
+  /* ===== Tarjeta apaisada de solo lectura (diseño moderno oscuro) ===== */
+  .viewcard {
+    position: fixed; inset: 0; z-index: 60; overflow: hidden;
+    background: #0c1016;
+    /* par en oscuro sería invisible → gris; doble bogey un poco más claro */
+    --par: #8b93a3; --double: #35609f;
+  }
+  .viewcard.hidden { display: none; }
+  .tk-rot {
+    position: absolute; top: 50%; left: 50%; transform-origin: center center;
+    display: flex; flex-direction: column; gap: 10px;
+    padding: calc(12px + env(safe-area-inset-top)) 16px calc(12px + env(safe-area-inset-bottom));
+    color: #fff;
+    background: radial-gradient(120% 100% at 0% 0%, #17402b 0%, #0f2a1e 34%, #10151d 78%);
+  }
+  /* Móvil en vertical: giramos la tarjeta para verla apaisada. */
+  @media (orientation: portrait) {
+    .tk-rot { width: 100vh; height: 100vw; transform: translate(-50%, -50%) rotate(90deg); }
+    .tk-rot { width: 100dvh; height: 100dvw; }
+  }
+  /* Si el teléfono ya está en horizontal, ocupa la pantalla sin girar. */
+  @media (orientation: landscape) {
+    .tk-rot { width: 100vw; height: 100vh; transform: translate(-50%, -50%); }
+    .tk-rot { width: 100dvw; height: 100dvh; }
+  }
+
+  .tk-head { display: flex; align-items: center; gap: 14px; flex: none; }
+  .tk-close { width: 36px; height: 36px; border-radius: 50%; border: 0; background: rgba(255,255,255,.14); color: #fff; font-size: 16px; font-weight: 700; flex: none; display: grid; place-items: center; }
+  .tk-close:active { transform: scale(.94); }
+  .tk-title { flex: 1; min-width: 0; }
+  .tk-name { font-size: 19px; font-weight: 800; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tk-meta { font-size: 12.5px; color: rgba(255,255,255,.68); margin-top: 1px; }
+  .tk-result { display: flex; align-items: center; gap: 10px; flex: none; }
+  .tk-big { font-size: 34px; font-weight: 800; line-height: 1; letter-spacing: -.03em; }
+  .tk-rblock { text-align: left; }
+  .tk-vs { font-size: 15px; font-weight: 800; background: #fff; border-radius: 7px; padding: 2px 9px; display: inline-block; }
+  .tk-rsub { font-size: 11px; color: rgba(255,255,255,.6); margin-top: 3px; font-weight: 600; }
+
+  .tk-table-wrap { flex: 1; min-height: 0; display: flex; }
+  .tk-grid {
+    width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed;
+    background: rgba(255,255,255,.045); border-radius: 18px; overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+  .tk-grid th, .tk-grid td { text-align: center; padding: 0; }
+  .tk-grid thead th { background: rgba(255,255,255,.09); font-size: 13px; font-weight: 800; color: rgba(255,255,255,.92); padding: 9px 0; }
+  .tk-grid tbody td { border-top: 1px solid rgba(255,255,255,.06); }
+  .tk-rh { width: 62px; text-align: left !important; padding-left: 14px !important; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: rgba(255,255,255,.55) !important; background: rgba(255,255,255,.03); }
+  .tk-par td { font-size: 14px; color: rgba(255,255,255,.6); font-weight: 700; padding: 7px 0; }
+  .tk-go td { padding: 8px 0; }
+  .tk-ball { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; padding: 0 5px; border-radius: 10px; color: #fff; font-weight: 800; font-size: 16px; box-shadow: inset 0 -2px 0 rgba(0,0,0,.14); }
+  .tk-ball.empty { background: transparent; color: rgba(255,255,255,.28); box-shadow: none; font-weight: 700; }
+  .tk-min td { font-size: 13px; color: rgba(255,255,255,.66); font-weight: 700; padding: 6px 0; }
+  .tk-ptsrow td { color: var(--indigo-2); }
+  /* Columnas de subtotal / total resaltadas */
+  .tk-grid .tk-sub { background: rgba(255,255,255,.07); font-weight: 800; color: #fff; }
+  .tk-grid .tk-tot { background: rgba(91,91,230,.34); font-weight: 800; color: #fff; }
+  .tk-grid thead .tk-sub, .tk-grid thead .tk-tot { font-size: 12px; letter-spacing: .03em; }
+
+  .tk-legend { flex: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; font-size: 12px; color: rgba(255,255,255,.7); font-weight: 600; }
+  .tk-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .tk-legend i { width: 11px; height: 11px; border-radius: 4px; display: inline-block; }
