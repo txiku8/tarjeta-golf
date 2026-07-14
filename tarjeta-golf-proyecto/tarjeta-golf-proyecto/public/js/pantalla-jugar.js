@@ -413,15 +413,16 @@ function saveRound() {
 
 /* ===== Resumen de la partida (una pantalla con el máximo de datos) =====
    Es la MISMA pantalla que aparece al terminar la partida; también se abre al
-   tocar una ronda del historial. */
-function showRoundSummary(r) {
+   tocar una ronda del historial. Única diferencia: el botón de la derecha es
+   "Hecho" al terminar y "Atrás" cuando se entra desde el historial. */
+function showRoundSummary(r, fromHistory) {
   $('#viewRound').classList.add('hidden');
   $('#roundBar').classList.add('hidden');
   $('#roundSheet').classList.add('hidden'); $('#roundSheet').classList.remove('open');
   $('#tabbar').classList.add('hidden');
   $('#mapFab').classList.add('hidden');
   const appHeader = document.querySelector('header.app'); if (appHeader) appHeader.classList.add('hidden');
-  renderSummary(r);
+  renderSummary(r, fromHistory);
   $('#viewSummary').classList.remove('hidden');
   window.scrollTo(0, 0);
 }
@@ -431,7 +432,7 @@ function closeSummary(toTab) {
   showTab(toTab || 'historial');
 }
 
-function renderSummary(r) {
+function renderSummary(r, fromHistory) {
   const t = roundTotals(r);
   const recv = golfStrokesReceived(r);
   const stb = r.mode === 'stableford';
@@ -522,7 +523,7 @@ function renderSummary(r) {
 
     <div class="sum-actions">
       <button class="btn ghost" id="sumCard">Ver tarjeta</button>
-      <button class="btn" id="sumDone">Atrás</button>
+      <button class="btn" id="sumDone">${fromHistory ? 'Atrás' : 'Hecho'}</button>
     </div>`;
 
   $('#sumCard').onclick = () => showRoundCard(r, () => $('#viewSummary').classList.remove('hidden'));
