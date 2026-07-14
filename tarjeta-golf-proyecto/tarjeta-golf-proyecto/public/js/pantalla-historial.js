@@ -17,7 +17,7 @@ function renderHistorial() {
         <div class="d">${fmtDate(r.date)} · ${t.played} hoyos · ${t.putts} putts</div>
       </div>
       <span class="pill ${cls}">${fmtVsPar(t.vsPar)}</span>`;
-    row.onclick = () => resumeRound(r);
+    row.onclick = () => showRoundSummary(r, true);
     hist.appendChild(row);
   });
 }
