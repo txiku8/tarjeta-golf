@@ -2,7 +2,7 @@
 const $ = s => document.querySelector(s);
 const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
 const uid = () => 'x' + Math.abs(Date.now() + Math.floor(performance.now()*1000)).toString(36) + Math.floor(performance.now()%1000);
-const LS = { courses: 'golf_courses_v1', rounds: 'golf_rounds_v1', active: 'golf_active_v1', profile: 'golf_profile_v1' };
+const LS = { courses: 'golf_courses_v1', rounds: 'golf_rounds_v1', active: 'golf_active_v1', profile: 'golf_profile_v1', wasSignedIn: 'golf_signed_in_v1' };
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const save = (k, v) => {
   localStorage.setItem(k, JSON.stringify(v));
@@ -16,7 +16,7 @@ let cloudMode = false, cloudUser = null, cloudUnsub = null, pushTimer = null, ap
 function scheduleCloudPush() {
   clearTimeout(pushTimer);
   pushTimer = setTimeout(() => {
-    if (!cloudUser) return;
+    if (!cloudUser) { if (cloudMode) scheduleCloudPush(); return; } // aún resolviendo la sesión: reintenta
     firebase.firestore().collection('users').doc(cloudUser.uid)
       .set({ courses, rounds, updated: Date.now() }, { merge: true }).catch(e => console.warn('push', e));
   }, 700);

@@ -31,9 +31,11 @@ function initCloud() {
   auth.onAuthStateChanged(user => {
     if (user) {
       cloudUser = user; cloudMode = true; localChosen = false;
+      localStorage.setItem(LS.wasSignedIn, '1');
       subscribeCloud(user.uid);
     } else {
       cloudUser = null; cloudMode = false;
+      localStorage.removeItem(LS.wasSignedIn);
       if (cloudUnsub) { cloudUnsub(); cloudUnsub = null; }
       if (!localChosen) $('#authView').classList.add('show');
     }
@@ -54,5 +56,11 @@ function initCloud() {
 $('#tabbar').querySelectorAll('.tabbtn').forEach(b => b.onclick = () => showTab(b.dataset.tab));
 
 /* ---------- boot ---------- */
-if (CLOUD_ENABLED) { $('#authView').classList.add('show'); initCloud(); }
+if (CLOUD_ENABLED) {
+  // Si la sesión anterior estaba iniciada, pintamos ya con los datos de localStorage:
+  // onAuthStateChanged + el primer snapshot llegan después y refrescan.
+  if (localStorage.getItem(LS.wasSignedIn)) { cloudMode = true; startApp(); }
+  else $('#authView').classList.add('show');
+  initCloud();
+}
 else showTab('jugar'); // servidor local / Artifact: modo local como hasta ahora
