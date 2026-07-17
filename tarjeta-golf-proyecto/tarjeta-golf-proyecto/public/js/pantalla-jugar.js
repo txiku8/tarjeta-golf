@@ -535,13 +535,42 @@ function renderSummary(r, fromHistory) {
    Se muestra en horizontal: en móvil vertical la tarjeta se gira 90°; si el
    usuario pone el teléfono en horizontal, ocupa la pantalla sin girar. */
 let cardBack = null; // callback para volver al pulsar cerrar
+
+/* La tarjeta es apaisada. Al abrirla intentamos bloquear la orientación en
+   horizontal para que no gire mientras se lee, y la liberamos al cerrar.
+   Solo funciona donde el navegador lo permite (Android Chrome, o la app añadida
+   a la pantalla de inicio); iOS Safari no deja bloquear la rotación desde una
+   web, así que ahí simplemente no hace nada (todo va en try/catch). */
+async function lockCardLandscape() {
+  if (!(navigator.maxTouchPoints > 0)) return; // en escritorio no forzamos nada
+  const v = $('#viewCard');
+  try {
+    if (!document.fullscreenElement) {
+      if (v.requestFullscreen) await v.requestFullscreen({ navigationUI: 'hide' });
+      else if (v.webkitRequestFullscreen) v.webkitRequestFullscreen();
+    }
+  } catch (_) {}
+  try {
+    if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape');
+  } catch (_) {}
+}
+function unlockCardOrientation() {
+  try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (_) {}
+  try {
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
+    else if (document.webkitFullscreenElement && document.webkitExitFullscreen) document.webkitExitFullscreen();
+  } catch (_) {}
+}
+
 function showRoundCard(r, back) {
   cardBack = back || null;
   $('#viewSummary').classList.add('hidden');
   renderRoundCard(r);
   $('#viewCard').classList.remove('hidden');
+  lockCardLandscape();
 }
 function closeRoundCard() {
+  unlockCardOrientation();
   $('#viewCard').classList.add('hidden');
   const b = cardBack; cardBack = null;
   if (b) b(); else closeSummary('historial');
