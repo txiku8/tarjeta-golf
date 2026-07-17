@@ -485,6 +485,22 @@
   .yo-item.danger { color: var(--bad); } .yo-item.danger .ico { color: var(--bad); }
   .yo-item .chev { margin-left: auto; color: var(--line-strong); font-size: 20px; }
 
+  /* Ficha de jugador (carné de golf) */
+  .golf-card {
+    position: relative; overflow: hidden; border-radius: var(--radius-lg); padding: 18px 18px 16px;
+    color: #fff; box-shadow: var(--shadow); margin-top: 12px;
+    background: linear-gradient(135deg, #1f7a4d 0%, #0f3d27 100%);
+  }
+  .golf-card::after { content: ''; position: absolute; right: -46px; top: -46px; width: 150px; height: 150px; border-radius: 50%; background: rgba(255,255,255,.06); }
+  .gc-top { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.82); position: relative; }
+  .gc-top svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .gc-name { font-size: 21px; font-weight: 800; letter-spacing: -.02em; margin: 12px 0 14px; position: relative; }
+  .gc-fields { display: flex; gap: 22px; position: relative; flex-wrap: wrap; }
+  .gc-field .k { font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: rgba(255,255,255,.72); }
+  .gc-field .v { font-size: 17px; font-weight: 800; letter-spacing: -.01em; margin-top: 3px; }
+  .gc-field.big .v { font-size: 24px; }
+  .gc-foot { position: relative; margin-top: 14px; font-size: 11px; color: rgba(255,255,255,.6); font-weight: 600; }
+
   /* ===== Pantalla de ronda: totales + tarjeta + editor ===== */
   .totstrip { display: flex; gap: 6px; margin: 2px 2px 12px; }
   .totstrip .ts-cell { flex: 1; text-align: center; padding: 8px 4px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }

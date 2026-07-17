@@ -1,0 +1,47 @@
+name: Actualizar hándicap RFEG
+
+on:
+  schedule:
+    - cron: '30 5 * * *'   # cada día a las 05:30 UTC (~07:30 España)
+  workflow_dispatch: {}     # permite lanzarlo a mano desde la pestaña Actions
+
+permissions:
+  contents: write
+
+concurrency:
+  group: handicap
+  cancel-in-progress: true
+
+jobs:
+  handicap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar Puppeteer
+        run: npm init -y >/dev/null 2>&1 && npm install puppeteer@23
+
+      - name: Leer hándicap de la RFEG
+        env:
+          RFEG_LICENCIA: VB26726281
+          RFEG_NOMBRE: KIMETZ
+          RFEG_AP1: ODRIOZOLA
+          RFEG_AP2: ONDARRA
+        run: node scripts/handicap.mjs
+
+      - name: Guardar si cambió
+        run: |
+          FILE=tarjeta-golf-proyecto/tarjeta-golf-proyecto/public/handicap.json
+          if [ -n "$(git status --porcelain "$FILE")" ]; then
+            git config user.name  "handicap-bot"
+            git config user.email "handicap-bot@users.noreply.github.com"
+            git add "$FILE"
+            git commit -m "Hándicap RFEG actualizado"
+            git push
+          else
+            echo "Sin cambios en el hándicap."
+          fi
