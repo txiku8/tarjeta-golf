@@ -119,6 +119,16 @@
     border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; box-shadow: var(--shadow);
     width: 100%; text-align: left; color: inherit;
   }
+  .round-item { position: relative; overflow: hidden; border-radius: 12px; margin-bottom: 10px; box-shadow: var(--shadow); }
+  .round-item .round-row { margin-bottom: 0; box-shadow: none; touch-action: pan-y; }
+  .round-delete {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 92px; z-index: 2;
+    border: none; border-radius: 12px; background: #e23b3b; color: #fff;
+    font-weight: 800; font-size: 14px; letter-spacing: -.01em; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transform: translateX(100%); transition: transform .18s ease; will-change: transform;
+  }
+  .round-item.open .round-delete { transform: translateX(0); }
   .round-score { font-size: 22px; font-weight: 800; letter-spacing: -.02em; min-width: 44px; text-align: center; }
   .round-info { flex: 1; min-width: 0; }
   .round-info .n { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
