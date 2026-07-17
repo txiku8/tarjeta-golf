@@ -1,4 +1,36 @@
 "use strict";
+
+/* ---------- Tarjetas de métrica con icono (Rendimiento + resumen) ---------- */
+// Icono SVG por nombre; hereda el color con currentColor.
+function sicon(name) {
+  const P = {
+    flag:     '<path d="M7 21V3.5"/><path d="M7 4.5h9l-2.2 2.8L16 10H7"/>',
+    chart:    '<path d="M4 18h15.5"/><path d="M5 14l4-4 3 2.4L18.5 6"/>',
+    putter:   '<path d="M14 3v9"/><path d="M14 12h-3.4a2.6 2.6 0 0 0 0 5.2H12"/><circle cx="17.6" cy="18.4" r="1.5" fill="currentColor" stroke="none"/>',
+    target:   '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".7" fill="currentColor" stroke="none"/>',
+    green:    '<ellipse cx="12" cy="15.5" rx="8" ry="3.8"/><path d="M12 15.5V5l4 1.4-4 1.4"/>',
+    scramble: '<circle cx="12" cy="12" r="8.5" stroke-dasharray="3 3.5"/>',
+    bunker:   '<path d="M3 14.5c2.2 0 2.2-2 4.5-2s2.3 2 4.5 2 2.3-2 4.5-2 2.3 2 4.5 2"/><path d="M4 19h16"/>',
+    ball:     '<circle cx="12" cy="12" r="8.5"/><circle cx="9.4" cy="10" r=".7" fill="currentColor" stroke="none"/><circle cx="13" cy="9.4" r=".7" fill="currentColor" stroke="none"/><circle cx="11.2" cy="13" r=".7" fill="currentColor" stroke="none"/>',
+    ring:     '<circle cx="12" cy="12" r="8.5"/>',
+    bird:     '<path d="M3 13q4.5-6 9-2 4.5-4 9 2"/>',
+    warn:     '<path d="M12 4.5l8 14.5H4z"/><path d="M12 10.5v4"/><circle cx="12" cy="17" r=".9" fill="currentColor" stroke="none"/>',
+  };
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    + (P[name] || P.ring) + '</svg>';
+}
+// Tarjeta: título, valor, sub, icono. vc = color del valor; ic = color del icono (por defecto = vc).
+function mtile(k, v, s, icon, vc, ic) {
+  ic = ic || vc;
+  const icStyle = ic ? ` style="color:${ic};background:color-mix(in srgb, ${ic} 15%, transparent)"` : '';
+  const vStyle = vc ? ` style="color:${vc}"` : '';
+  return `<div class="mtile"><div class="mtile-txt">`
+    + `<div class="k">${k}</div>`
+    + `<div class="v tnum"${vStyle}>${v}</div>`
+    + (s ? `<div class="s">${s}</div>` : '')
+    + `</div><div class="mtile-ic"${icStyle}>${sicon(icon)}</div></div>`;
+}
+
 function parArr(seq) { return seq.split('').map(Number); }
 // Genera un reparto de par por hoyo realista que suma exactamente el par total.
 function parLayout(holes, totalPar) {

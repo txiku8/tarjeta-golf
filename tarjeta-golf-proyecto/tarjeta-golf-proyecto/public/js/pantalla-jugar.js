@@ -470,8 +470,7 @@ function renderSummary(r, fromHistory) {
   const modeLbl = stb ? 'Stableford' : 'Medal play';
   const hcpLbl = hasHcp ? ' · hcp ' + fmtHcp(r.hcp) : '';
 
-  const tile = (k, v, s, color) =>
-    `<div class="sum-tile"><div class="k">${k}</div><div class="v tnum"${color ? ` style="color:${color}"` : ''}>${v}${s ? ` <small>${s}</small>` : ''}</div></div>`;
+  const mut = 'var(--muted)';
   const vsChip = (lbl, v) =>
     `<div class="svs"><span class="k">${lbl}</span><span class="v tnum" style="color:${vsColor(v)}">${fmtVsPar(v)}</span></div>`;
 
@@ -503,16 +502,16 @@ function renderSummary(r, fromHistory) {
     <div class="dist-legend">${segs.map(s => `<span class="dl"><span class="dot" style="background:${s[2]}"></span>${s[0]} <b class="tnum">${s[1]}</b></span>`).join('')}</div>
 
     <div class="sum-sec">Estadísticas</div>
-    <div class="sum-grid">
-      ${tile('Putts', t.putts, puttsPer.toFixed(2).replace('.', ',') + '/hoyo')}
-      ${tile('Putts / GIR', t.gir ? t.puttsPerGir.toFixed(2).replace('.', ',') : '—', t.gir ? 'en ' + t.gir : 'sin greens')}
-      ${tile('1 putt', onePutts, threePutts + ' de 3+')}
-      ${tile('Calles', t.firPoss ? t.firPct + '%' : '—', t.firPoss ? t.firHit + '/' + t.firPoss : 'par 3')}
-      ${tile('Greens (GIR)', t.girPoss ? t.girPct + '%' : '—', t.gir + '/' + t.girPoss)}
-      ${tile('Scrambling', t.scrPoss ? t.scrPct + '%' : '—', t.scrPoss ? t.scr + '/' + t.scrPoss : 'todos los greens')}
-      ${tile('Bunkers', t.sandPoss ? t.sandPct + '%' : '—', t.sandPoss ? t.sand + '/' + t.sandPoss : 'ninguno')}
-      ${tile('Penaliz.', t.pen)}
-      ${tile('Mejor hoyo', bestI >= 0 ? 'H' + hno(bestI) : '—', bestLbl, best !== null ? vsColor(best) : null)}
+    <div class="mgrid2">
+      ${mtile('Putts', t.putts, puttsPer.toFixed(2).replace('.', ',') + ' / hoyo', 'putter', 'var(--info)', mut)}
+      ${mtile('Putts / GIR', t.gir ? t.puttsPerGir.toFixed(2).replace('.', ',') : '—', t.gir ? 'en ' + t.gir : 'sin greens', 'ball', t.gir ? 'var(--info)' : mut)}
+      ${mtile('1 putt', onePutts, threePutts + ' de 3+', 'ring', onePutts ? 'var(--indigo)' : mut)}
+      ${mtile('Calles', t.firPoss ? t.firPct + '%' : '—', t.firPoss ? t.firHit + ' / ' + t.firPoss : 'par 3', 'target', t.firPoss ? 'var(--indigo)' : mut)}
+      ${mtile('Greens (GIR)', t.girPoss ? t.girPct + '%' : '—', t.gir + ' / ' + t.girPoss, 'green', t.girPoss ? 'var(--good)' : mut)}
+      ${mtile('Scrambling', t.scrPoss ? t.scrPct + '%' : '—', t.scrPoss ? t.scr + ' / ' + t.scrPoss : 'todos', 'scramble', t.scrPoss ? 'var(--good)' : mut)}
+      ${mtile('Bunkers', t.sandPoss ? t.sandPct + '%' : '—', t.sandPoss ? t.sand + ' / ' + t.sandPoss : 'ninguno', 'bunker', t.sandPoss ? 'var(--warn)' : mut)}
+      ${mtile('Penaliz.', t.pen, 'golpes', 'warn', t.pen ? 'var(--bad)' : mut)}
+      ${mtile('Mejor hoyo', bestI >= 0 ? 'H' + hno(bestI) : '—', bestLbl, 'flag', best !== null ? vsColor(best) : mut)}
     </div>
 
     ${showSplit ? `

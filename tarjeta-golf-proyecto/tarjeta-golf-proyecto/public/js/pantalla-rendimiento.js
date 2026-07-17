@@ -39,18 +39,16 @@ function renderRendimiento() {
   const withHoles = last.filter(r => roundTotals(r).played > 0);
   const puttsPer = agg.played ? (agg.putts / agg.played) : 0;
 
-  const stats = [
-    { k: 'Rondas', v: rounds.length },
-    { k: 'Media vs par', v: agg.played ? fmtVsPar(Math.round((agg.strokes - agg.par) / (last.length || 1))) : '—', sub: '/ ronda' },
-    { k: 'Putts / hoyo', v: agg.played ? puttsPer.toFixed(2).replace('.', ',') : '—' },
-    { k: 'Calles', v: agg.firPoss ? Math.round(agg.firHit / agg.firPoss * 100) + '%' : '—' },
-  ];
-  const sr = $('#homeStats'); sr.innerHTML = '';
-  stats.forEach(s => {
-    const d = el('div', 'stat');
-    d.innerHTML = `<div class="k">${s.k}</div><div class="v tnum">${s.v}${s.sub ? ' <small>' + s.sub + '</small>' : ''}</div>`;
-    sr.appendChild(d);
-  });
+  const mediaVs = agg.played ? Math.round((agg.strokes - agg.par) / (last.length || 1)) : null;
+  $('#homeStats').innerHTML = [
+    mtile('Rondas', rounds.length, '', 'flag', null, 'var(--good)'),
+    mtile('Media vs Par', mediaVs != null ? fmtVsPar(mediaVs) : '—', 'por ronda', 'chart',
+      mediaVs != null ? vsColor(mediaVs) : 'var(--muted)', 'var(--indigo)'),
+    mtile('Putts / hoyo', agg.played ? puttsPer.toFixed(2).replace('.', ',') : '—', '', 'putter',
+      agg.played ? 'var(--info)' : 'var(--muted)', 'var(--muted)'),
+    mtile('Calles', agg.firPoss ? Math.round(agg.firHit / agg.firPoss * 100) + '%' : '—', '', 'target',
+      agg.firPoss ? 'var(--indigo)' : 'var(--muted)'),
+  ].join('');
 
   const ha = rendHoleAgg(withHoles);
   renderRendStats(agg, ha, withHoles.length);
@@ -64,19 +62,18 @@ function renderRendStats(agg, ha, nRounds) {
   const sec = $('#rendStatsSec'), box = $('#rendStats');
   if (!agg.played) { sec.style.display = 'none'; box.innerHTML = ''; return; }
   sec.style.display = '';
-  const tile = (k, v, s) =>
-    `<div class="sum-tile"><div class="k">${k}</div><div class="v tnum">${v}${s ? ` <small>${s}</small>` : ''}</div></div>`;
   const pct = (n, d) => d ? Math.round(n / d * 100) + '%' : '—';
   const holes = n => n + (n === 1 ? ' hoyo' : ' hoyos');
+  const mut = 'var(--muted)';
   box.innerHTML = [
-    tile('Greens (GIR)', pct(agg.gir, agg.girPoss), agg.gir + '/' + agg.girPoss),
-    tile('Scrambling', agg.scrPoss ? pct(agg.scr, agg.scrPoss) : '—', agg.scrPoss ? agg.scr + '/' + agg.scrPoss : 'todos'),
-    tile('Bunkers', agg.sandPoss ? pct(agg.sand, agg.sandPoss) : '—', agg.sandPoss ? agg.sand + '/' + agg.sandPoss : 'sin datos'),
-    tile('Putts / GIR', agg.gir ? (agg.girPutts / agg.gir).toFixed(2).replace('.', ',') : '—', agg.gir ? 'en ' + agg.gir : 'sin greens'),
-    tile('1 putt', pct(ha.onePutt, agg.played), holes(ha.onePutt)),
-    tile('3 putts', pct(ha.threePutt, agg.played), holes(ha.threePutt)),
-    tile('Birdies+', nRounds ? (ha.birdie / nRounds).toFixed(1).replace('.', ',') : '—', '/ ronda'),
-    tile('Penaliz.', nRounds ? (agg.pen / nRounds).toFixed(1).replace('.', ',') : '—', '/ ronda'),
+    mtile('Greens (GIR)', pct(agg.gir, agg.girPoss), agg.gir + ' / ' + agg.girPoss, 'green', agg.girPoss ? 'var(--good)' : mut),
+    mtile('Scrambling', agg.scrPoss ? pct(agg.scr, agg.scrPoss) : '—', agg.scrPoss ? agg.scr + ' / ' + agg.scrPoss : 'todos', 'scramble', agg.scrPoss ? 'var(--good)' : mut),
+    mtile('Bunkers', agg.sandPoss ? pct(agg.sand, agg.sandPoss) : '—', agg.sandPoss ? agg.sand + ' / ' + agg.sandPoss : 'sin datos', 'bunker', agg.sandPoss ? 'var(--warn)' : mut),
+    mtile('Putts / GIR', agg.gir ? (agg.girPutts / agg.gir).toFixed(2).replace('.', ',') : '—', agg.gir ? 'en ' + agg.gir : 'sin greens', 'ball', agg.gir ? 'var(--info)' : mut),
+    mtile('1 putt', pct(ha.onePutt, agg.played), holes(ha.onePutt), 'ring', ha.onePutt ? 'var(--indigo)' : mut),
+    mtile('3 putts', pct(ha.threePutt, agg.played), holes(ha.threePutt), 'ring', ha.threePutt ? 'var(--bad)' : mut),
+    mtile('Birdies+', nRounds ? (ha.birdie / nRounds).toFixed(1).replace('.', ',') : '—', 'por ronda', 'bird', 'var(--good)'),
+    mtile('Penaliz.', nRounds ? (agg.pen / nRounds).toFixed(1).replace('.', ',') : '—', 'por ronda', 'warn', agg.pen ? 'var(--bad)' : mut),
   ].join('');
 }
 
