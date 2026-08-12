@@ -37,21 +37,20 @@ const run = async () => {
     ]);
     await new Promise(r => setTimeout(r, 2000));
 
-    // Busca en las tablas la fila con la licencia (o el nombre) y saca hándicap/estado/fecha.
-    const row = await page.evaluate((lic, ap1) => {
-      const key = (lic || ap1 || '').toUpperCase();
+    // Busca la fila cuya celda ES exactamente la licencia (evita las filas
+    // "contenedoras" que arrastran todo el texto de la web, licencia incluida).
+    const row = await page.evaluate((lic) => {
       for (const tr of document.querySelectorAll('tr')) {
-        const cells = [...tr.querySelectorAll('td')].map(c => c.innerText.trim());
-        if (cells.length >= 3 && cells.join(' ').toUpperCase().includes(key)) {
-          return cells;
-        }
+        const cells = [...tr.querySelectorAll(':scope > td')].map(c => c.innerText.trim());
+        if (cells.some(c => c.toUpperCase() === lic.toUpperCase())) return cells;
       }
       return null;
-    }, LIC, AP1);
+    }, LIC);
 
     if (!row) throw new Error('No se encontró la fila de resultados');
-    // Formato esperado: [Nombre, Licencia, Hándicap, Estado, Modificacion]
-    const [nombre, licencia, handicap, estado, fecha] = row;
+    // Formato esperado tras quitar vacías: [Nombre, Licencia, Hándicap, Estado, Modificacion]
+    const clean = row.filter(c => c !== '');
+    const [nombre, licencia, handicap, estado, fecha] = clean;
     const data = {
       nombre: nombre || `${NOMBRE} ${AP1} ${AP2}`.trim(),
       licencia: licencia || LIC,
@@ -61,6 +60,9 @@ const run = async () => {
       updated: new Date().toISOString().slice(0, 10),
     };
     if (!data.handicap) throw new Error('Hándicap vacío');
+    // Sanity: debe ser un número tipo "24,4"; si no, se leyó la fila equivocada -> abortar.
+    if (!/^\+?\d{1,2}(,\d)?$/.test(data.handicap)) throw new Error('Hándicap con formato raro: ' + JSON.stringify(data.handicap));
+    if (data.licencia.toUpperCase() !== LIC.toUpperCase()) throw new Error('Licencia no coincide: ' + JSON.stringify(data.licencia));
     // Solo escribe si cambió algo relevante (evita commits diarios inútiles).
     let prev = null;
     try { prev = JSON.parse(fs.readFileSync(OUT, 'utf8')); } catch {}

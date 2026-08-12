@@ -88,9 +88,9 @@ function renderPlayerCard(box, accountName) {
   try { cached = JSON.parse(localStorage.getItem('golf_hcp_v1')); } catch {}
   paint(cached);
 
-  // Refresca SIEMPRE que se abre la ficha (cada apertura de la app): lee el valor fresco
-  // que el robot (GitHub Actions) deja en handicap.json del repo (raw) y, si falla, del
-  // propio hosting (copia semilla). Mientras llega, ya se ve la copia guardada.
+  // Refresca SIEMPRE que se abre la ficha (cada apertura de la app). El robot (GitHub
+  // Actions) deja el valor fresco en handicap.json del repo; se lee del raw de GitHub y,
+  // si fallara, del propio hosting como respaldo. Mientras llega, ya se ve la copia guardada.
   const RAW = 'https://raw.githubusercontent.com/txiku8/tarjeta-golf/main/tarjeta-golf-proyecto/tarjeta-golf-proyecto/public/handicap.json';
   const grab = url => fetch(url, { cache: 'no-cache' }).then(r => r.ok ? r.json() : Promise.reject());
   grab(RAW).catch(() => grab('handicap.json'))
