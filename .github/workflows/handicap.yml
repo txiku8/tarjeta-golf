@@ -27,7 +27,6 @@ jobs:
 
       - name: Leer hándicap de la RFEG
         env:
-          RFEG_LICENCIA: VB26726281
           RFEG_NOMBRE: KIMETZ
           RFEG_AP1: ODRIOZOLA
           RFEG_AP2: ONDARRA

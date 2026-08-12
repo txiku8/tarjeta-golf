@@ -2,7 +2,7 @@
    Guarda una copia de la app (HTML, CSS, JS y librerías) para que arranque
    SIN COBERTURA una vez abierta al menos una vez con conexión.
    Sube CACHE_VERSION cada vez que cambien los archivos para forzar la actualización. */
-const CACHE_VERSION = 'golf-v3';
+const CACHE_VERSION = 'golf-v4';
 
 /* Núcleo imprescindible: sin esto la app no arranca. Si algo falla, falla la
    instalación (y se reintenta en la siguiente visita). */

@@ -78,7 +78,6 @@ function renderPlayerCard(box, accountName) {
       <div class="gc-name">${esc(d.nombre || accountName || 'Jugador')}</div>
       <div class="gc-fields">
         <div class="gc-field big"><div class="k">Hándicap</div><div class="v tnum">${esc(d.handicap)}</div></div>
-        <div class="gc-field"><div class="k">Nº licencia</div><div class="v tnum">${esc(d.licencia || '—')}</div></div>
         ${d.estado ? `<div class="gc-field"><div class="k">Estado</div><div class="v">${esc(d.estado)}</div></div>` : ''}
       </div>
       <div class="gc-foot">${foot}</div>`;
