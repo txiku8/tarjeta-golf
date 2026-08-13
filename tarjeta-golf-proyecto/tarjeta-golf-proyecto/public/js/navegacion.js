@@ -168,11 +168,32 @@ function openRoundConfig(course) {
         </div>
         <div class="rc-modo">
           <span class="k">Modo de juego</span>
-          <div class="seg rc-seg" id="rcMode">
+          <div class="seg rc-seg rc-seg3" id="rcMode">
             <button type="button" data-m="stableford" class="on">Stableford</button>
-            <button type="button" data-m="medal">Medal play</button>
+            <button type="button" data-m="medal">Medal</button>
+            <button type="button" data-m="match">Match play</button>
           </div>
         </div>
+      </div>
+
+      <div class="rc-sec hidden" id="rcRivalSec">Rival</div>
+      <div class="rc-group hidden" id="rcRivalGrp">
+        <div class="rc-row">
+          <span class="k">Nombre</span>
+          <span class="v"><input id="rcRival" type="text" maxlength="18" placeholder="Rival" value="${esc(profile.rivalName || '')}"></span>
+        </div>
+        <div class="rc-modo">
+          <span class="k">Ventaja</span>
+          <div class="seg rc-seg" id="rcAdv">
+            <button type="button" data-a="hcp" class="on">Con hándicap</button>
+            <button type="button" data-a="scratch">Los dos a scratch</button>
+          </div>
+        </div>
+        <div class="rc-row" id="rcRivalHcpRow">
+          <span class="k">${tees ? 'Hándicap exacto' : 'Hándicap de juego'}</span>
+          <span class="v"><input id="rcRivalHcp" type="number" inputmode="decimal" step="${tees ? '0.1' : '1'}" min="-10" max="54" placeholder="${tees ? 'Índice' : 'Golpes'}" value="${tees ? (profile.rivalIndex != null ? profile.rivalIndex : '') : (profile.rivalHcp != null ? profile.rivalHcp : '')}"></span>
+        </div>
+        <div class="rc-note" id="rcAdvNote"></div>
       </div>
 
       <div class="rc-sec">Hándicap</div>
@@ -208,35 +229,77 @@ function openRoundConfig(course) {
     </div>`;
   document.body.appendChild(bg);
 
-  let mode = 'stableford';
-  const modeBox = $('#rcMode');
+  let mode = 'stableford', adv = 'hcp';
+  const modeBox = $('#rcMode'), advBox = $('#rcAdv');
+  const holesSel = $('#rcHoles');
+  const curTee = () => tees ? (tees[+$('#rcTee').value] || tees[0]) : null;
+  const nine = () => holesSel.value !== '18';
+  // Hándicap de juego (golpes) a partir del índice, con la asignación de la modalidad.
+  function playingHcp(index, allow) {
+    const t = curTee(), sr = t[1], cr = t[2];
+    let ph = allow * (index * (sr / 113) + (cr - par));
+    if (nine()) ph /= 2;
+    return Math.round(ph);
+  }
+  const numVal = sel => { const raw = $(sel).value.trim(); if (raw === '') return null; const v = parseFloat(raw.replace(',', '.')); return isNaN(v) ? null : v; };
+  const myPH = () => { const v = numVal('#rcHcp'); return v == null ? null : Math.round(v); };
+  // Hándicap de juego del rival: si el campo tiene slope se introduce su índice y se convierte al 100%.
+  const rivalPH = () => { const v = numVal('#rcRivalHcp'); return v == null ? null : (tees ? playingHcp(v, 1) : Math.round(v)); };
+
   modeBox.querySelectorAll('button').forEach(b => b.onclick = () => {
     mode = b.dataset.m;
     modeBox.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    const m = mode === 'match';
+    $('#rcRivalSec').classList.toggle('hidden', !m);
+    $('#rcRivalGrp').classList.toggle('hidden', !m);
+    recalc(); // el match play individual se juega al 100% del hándicap, no al 95%
+  });
+  advBox.querySelectorAll('button').forEach(b => b.onclick = () => {
+    adv = b.dataset.a;
+    advBox.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    recalcAdv();
   });
 
-  const holesSel = $('#rcHoles');
-  const curTee = () => tees ? (tees[+$('#rcTee').value] || tees[0]) : null;
-  // Recalcula el hándicap de juego al cambiar índice, barra o nº de hoyos.
+  // Recalcula el hándicap de juego al cambiar índice, barra, nº de hoyos o modalidad.
   function recalc() {
-    if (!tees) return;
-    const box = $('#rcCalc'), raw = $('#rcIndex').value.trim();
-    if (raw === '') { $('#rcHcp').value = ''; box.textContent = 'Introduce tu índice para calcular los golpes.'; return; }
-    const index = parseFloat(raw.replace(',', '.'));
-    const t = curTee(), sr = t[1], cr = t[2];
-    const nine = holesSel.value !== '18';
-    let ph = HCP_ALLOWANCE * (index * (sr / 113) + (cr - par));
-    if (nine) ph /= 2;
-    const phR = Math.round(ph);
-    $('#rcHcp').value = phR;
-    box.innerHTML = `redondear( 95% × [ ${fmtHcp(index)} × ${sr}/113 + (${fmtHcp(cr)} − ${par}) ]${nine ? ' ÷ 2' : ''} ) = <b>${phR} golpes</b>`;
+    if (tees) {
+      const box = $('#rcCalc'), index = numVal('#rcIndex');
+      if (index == null) { $('#rcHcp').value = ''; box.textContent = 'Introduce tu índice para calcular los golpes.'; }
+      else {
+        const allow = mode === 'match' ? 1 : HCP_ALLOWANCE; // RFEG/WHS: match play individual al 100%
+        const t = curTee(), sr = t[1], cr = t[2], phR = playingHcp(index, allow);
+        $('#rcHcp').value = phR;
+        box.innerHTML = `redondear( ${Math.round(allow * 100)}% × [ ${fmtHcp(index)} × ${sr}/113 + (${fmtHcp(cr)} − ${par}) ]${nine() ? ' ÷ 2' : ''} ) = <b>${phR} golpes</b>`;
+      }
+    }
+    recalcAdv();
+  }
+  // Nota de la ventaja del partido: quién da golpes a quién (o si se juega a scratch).
+  function recalcAdv() {
+    if (mode !== 'match') return;
+    const note = $('#rcAdvNote');
+    $('#rcRivalHcpRow').classList.toggle('hidden', adv === 'scratch');
+    if (adv === 'scratch') {
+      note.textContent = 'Los dos jugáis con los golpes brutos, sin ventaja: gana el hoyo quien haga menos golpes.';
+      return;
+    }
+    const mine = myPH(), his = rivalPH();
+    if (mine == null || his == null) { note.textContent = 'Introduce los dos hándicaps y se reparten los golpes de ventaja por stroke index.'; return; }
+    const g = mine - his, nm = esc($('#rcRival').value.trim() || 'el rival');
+    note.innerHTML = g === 0
+      ? `Mismo hándicap de juego (${mine}): el partido se juega sin ventaja.`
+      : (g > 0 ? `Recibes <b>${g} golpe${g === 1 ? '' : 's'}</b>` : `Le das <b>${-g} golpe${g === -1 ? '' : 's'}</b> a ${nm}`)
+        + ` (${mine} − ${his}), en los hoyos de índice más bajo.`;
   }
   if (tees) {
     $('#rcIndex').oninput = recalc;
     $('#rcTee').onchange = recalc;
     holesSel.onchange = recalc;
-    recalc();
   }
+  $('#rcHcp').oninput = recalcAdv;
+  $('#rcRivalHcp').oninput = recalcAdv;
+  $('#rcRival').oninput = recalcAdv;
+  recalc();
 
   const close = () => bg.remove();
   bg.onclick = e => { if (e.target === bg) close(); };
@@ -253,9 +316,22 @@ function openRoundConfig(course) {
     } else {
       profile.hcp = hcp;
     }
-    save(LS.profile, profile); // recuerda índice/barra (o golpes) para la próxima
+    // Match play: rival, ventaja (o scratch) y golpes que se dan.
+    let match = null;
+    if (mode === 'match') {
+      const scratch = adv === 'scratch';
+      const his = scratch ? null : rivalPH();
+      if (!scratch && his == null) { toast('Pon el hándicap del rival o juega a scratch'); return; }
+      const rival = $('#rcRival').value.trim() || 'Rival';
+      match = { rival, scratch, myHcp: hcp, rivalHcp: his,
+        give: (scratch || hcp == null) ? 0 : hcp - his,
+        holes: blankMatchHoles(0) }; // se dimensiona en startRound, ya con el rango de hoyos
+      profile.rivalName = rival;
+      if (!scratch) { if (tees) profile.rivalIndex = numVal('#rcRivalHcp'); else profile.rivalHcp = his; }
+    }
+    save(LS.profile, profile); // recuerda índice/barra (o golpes) y el rival para la próxima
     close();
-    startRound(course, { range: holesSel.value, mode, hcp, index, barra });
+    startRound(course, { range: holesSel.value, mode, hcp, index, barra, match });
   };
 }
 

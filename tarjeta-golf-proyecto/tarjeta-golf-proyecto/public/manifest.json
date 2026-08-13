@@ -1,0 +1,18 @@
+{
+  "id": "/",
+  "name": "Tarjeta de Golf",
+  "short_name": "Golf",
+  "description": "Apunta tus rondas de golf y sincronízalas en la nube.",
+  "start_url": "/index.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f0f0f3",
+  "theme_color": "#5b5be6",
+  "lang": "es",
+  "icons": [
+    { "src": "/icons/icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+  ]
+}

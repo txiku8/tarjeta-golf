@@ -1,0 +1,77 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="css/estilos.css"><style>html,body{margin:0;background:#000}</style></head><body>
+<div class="gpsview hidden" id="viewGps">
+  <canvas id="gpsCanvas"></canvas>
+  <svg class="gps-svg" id="gpsSvg"><polyline id="gpsLine" points=""></polyline><polyline id="gpsLineAim" points=""></polyline></svg>
+  <button class="gps-x" id="gpsClose" aria-label="Cerrar">✕</button>
+  <div class="gps-green" id="gpsGreen">
+    <div class="gg-row gg-mid"><b id="gpsMid">—</b><span>m al centro</span></div>
+    <span class="gg-tap">TOCA PARA AMPLIAR</span>
+  </div>
+  <div class="gps-edge" id="gpsBackDot"></div>
+  <div class="gps-edge" id="gpsFrontDot"></div>
+  <div class="gps-flag2" id="gpsFlag"></div>
+  <div class="gps-me2" id="gpsMe"><svg viewBox="0 0 24 24"><path d="M12 3l7 17-7-4-7 4z"></path></svg></div>
+  <div class="gps-aim" id="gpsAim"></div>
+  <div class="gps-badge" id="gpsAimBadge"><b id="gpsAimM">—</b><small id="gpsAimRest">—</small></div>
+  <div class="gps-note" id="gpsNote"></div>
+  <div class="gps-sheet hidden" id="gpsDist">
+    <div class="gs-top">
+      <div class="gs-acc">
+        <span class="gs-bars" id="gpsAccBars"><i></i><i></i><i></i></span>
+        <div class="gs-acc-txt"><small>PRECISIÓN DE GPS</small><b id="gpsAccTxt">buscando…</b></div>
+      </div>
+      <div class="gs-unit">Metros</div>
+    </div>
+    <div class="gs-nums">
+      <div class="gs-row" id="gpsRowBack"><small>TRASERA DEL GREEN</small>
+        <div class="gs-n"><b id="gpsDistBack">—</b><i>m</i></div></div>
+      <div class="gs-row gs-big"><small>CENTRO DEL GREEN</small>
+        <div class="gs-n"><b id="gpsDistMid">—</b><i>m</i></div></div>
+      <div class="gs-row" id="gpsRowFront"><small>FRENTE DEL GREEN</small>
+        <div class="gs-n"><b id="gpsDistFront">—</b><i>m</i></div></div>
+    </div>
+    <div class="gs-from" id="gpsDistFrom"></div>
+    <button class="gs-close" id="gpsDistClose" aria-label="Cerrar">⌄</button>
+  </div>
+  <div class="gps-hbar">
+    <button class="hb-nav" id="gpsPrev" aria-label="Hoyo anterior">‹</button>
+    <button class="hb-mid" id="gpsScoreBtn" aria-label="Apuntar resultado">
+      <div class="hb-line"><span class="hb-flag">⛳</span><span class="hb-no" id="gpsHbNo">1</span><span class="hb-meta" id="gpsHbMeta">PAR 4</span></div>
+      <div class="hb-edit">✎ Apuntar golpes</div>
+    </button>
+    <button class="hb-nav" id="gpsNext" aria-label="Hoyo siguiente">›</button>
+  </div>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+function norm(s){return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
+function haversineKm(a,b,c,d){const r=x=>x*Math.PI/180,R=6371;const dLat=r(c-a),dLon=r(d-b);
+ return 2*R*Math.asin(Math.sqrt(Math.sin(dLat/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dLon/2)**2));}
+function toast(m){} function renderRound(){}
+function holeNo(i){return (active.holeStart||1)+i;}
+let selHole=0;
+const Q=new URLSearchParams(location.search);
+const CAMPO=Q.get("c")||"X", HOYO=+(Q.get("h")||1), POS=Q.get("pos")||"media", ACC=+(Q.get("acc")||6);
+let active={courseName:CAMPO,holeStart:1,pars:Array(18).fill(4),si:Array(18).fill(1),holes:Array.from({length:18},()=>({strokes:0}))};
+</script>
+<script src="js/gps-datos.js"></script>
+<script src="js/pantalla-gps.js"></script>
+<script>
+const H=gpsHolesFor(CAMPO)[HOYO];
+const L=k=>[H.t[0]+(H.c[0]-H.t[0])*k, H.t[1]+(H.c[1]-H.t[1])*k];
+const P=POS==="salida"?L(0.02):POS==="green"?L(0.9):L(0.5);
+navigator.geolocation.watchPosition=cb=>{setTimeout(()=>cb({coords:{latitude:P[0],longitude:P[1],accuracy:ACC}}),30);return 1;};
+navigator.geolocation.clearWatch=()=>{};
+selHole=HOYO-1; openGps();
+setTimeout(()=>{
+  if(Q.get("abrir")==="1") $("#gpsGreen").click();
+  const pan=$("#gpsGreen").getBoundingClientRect();
+  document.title="panelPequeno "+Math.round(pan.width)+"x"+Math.round(pan.height)+
+   " texto[" + $("#gpsGreen").innerText.replace(/\n/g," / ") + "]" +
+   " grande:" + ($("#gpsDist").classList.contains("hidden")?"cerrado":"abierto") +
+   " frenteDot:"+($("#gpsFrontDot").style.display||"-");
+}, 1000);
+window.onerror=(m,s,l)=>{document.title="ERROR "+m+" @"+l;};
+</script></body></html>

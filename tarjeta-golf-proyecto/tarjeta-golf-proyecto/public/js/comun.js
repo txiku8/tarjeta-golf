@@ -143,17 +143,18 @@ function roundTotals(r) {
 // reducido a la mitad si se juegan 9 hoyos) entre los hoyos jugados, según su stroke index:
 //   perHole = floor(hcp / nHoyos);  los `hcp mod nHoyos` hoyos más difíciles reciben 1 golpe extra.
 // La dificultad se ordena por stroke index (menor = más difícil) sobre los hoyos realmente jugados.
-function golfStrokesReceived(r) {
-  const n = r.pars.length;
+function spreadStrokes(pars, si, hcp) {
+  const n = pars.length;
   const recv = new Array(n).fill(0);
-  const hcp = Math.round(r.hcp != null ? r.hcp : 0);
+  hcp = Math.round(hcp || 0);
   if (hcp <= 0 || !n) return recv;
   const perHole = Math.floor(hcp / n), extra = hcp % n;
-  const order = r.pars.map((_, i) => i)
-    .sort((a, b) => ((r.si && r.si[a]) || a + 1) - ((r.si && r.si[b]) || b + 1));
+  const order = pars.map((_, i) => i)
+    .sort((a, b) => ((si && si[a]) || a + 1) - ((si && si[b]) || b + 1));
   order.forEach((idx, rank) => { recv[idx] = perHole + (rank < extra ? 1 : 0); });
   return recv;
 }
+function golfStrokesReceived(r) { return spreadStrokes(r.pars, r.si, r.hcp != null ? r.hcp : 0); }
 // Puntos Stableford (2 + par + golpes recibidos − golpes, mín 0). Se calcula SIEMPRE, aunque la
 // ronda sea Medal play, para poder mostrar "como si jugara en Stableford" al clicar en Golpes.
 function stablefordPoints(r) {
@@ -163,6 +164,81 @@ function stablefordPoints(r) {
     if (h.strokes > 0) pts += Math.max(0, 2 + (r.pars[i] + recv[i]) - h.strokes);
   });
   return pts;
+}
+
+/* ---------- Match play (uno contra uno) ----------
+   La ronda guarda un bloque `match`:
+     { rival, scratch, myHcp, rivalHcp, give, holes:[{strokes, conc}] }
+   `give` = golpes de ventaja del partido (hcp de juego mío − del rival, ambos al 100%):
+     > 0 los recibo yo, < 0 los recibe el rival, 0 o `scratch` = nadie da nada.
+   `conc` marca un hoyo concedido: 'me' = se lo doy por perdido, 'rival' = me lo dan. */
+function isMatch(r) { return !!(r && r.mode === 'match' && r.match); }
+function blankMatchHoles(n) { return Array.from({ length: n }, () => ({ strokes: 0, conc: null })); }
+
+// Golpes de ventaja por hoyo repartidos por stroke index: { me:[…], rival:[…] }.
+function matchStrokes(r) {
+  const n = r.pars.length, zero = new Array(n).fill(0);
+  const m = r.match;
+  if (!m || m.scratch) return { me: zero, rival: zero.slice() };
+  const g = Math.round(m.give || 0);
+  if (!g) return { me: zero, rival: zero.slice() };
+  const spread = spreadStrokes(r.pars, r.si, Math.abs(g));
+  return g > 0 ? { me: spread, rival: zero } : { me: zero, rival: spread };
+}
+// Resultado de un hoyo: 1 lo gano yo, −1 lo gana el rival, 0 empatado, null aún sin decidir.
+function matchHoleResult(r, i, ms) {
+  const m = r.match; if (!m || !m.holes[i]) return null;
+  const c = m.holes[i].conc;
+  if (c === 'me') return -1;      // yo concedo el hoyo → lo gana el rival
+  if (c === 'rival') return 1;    // el rival me lo concede → lo gano yo
+  const my = r.holes[i].strokes, rv = m.holes[i].strokes;
+  if (!my || !rv) return null;
+  ms = ms || matchStrokes(r);
+  const a = my - ms.me[i], b = rv - ms.rival[i];
+  return a < b ? 1 : a > b ? -1 : 0;
+}
+// Estado del partido. `up` > 0 = voy ganando por esos hoyos.
+// El partido se cierra cuando la ventaja es mayor que los hoyos que quedan (de ahí el "3&2").
+function matchState(r) {
+  const n = r.pars.length, ms = matchStrokes(r);
+  const res = []; const run = [];
+  let up = 0, decided = 0, closedAt = -1, closedUp = 0, closedLeft = 0;
+  for (let i = 0; i < n; i++) {
+    const x = matchHoleResult(r, i, ms);
+    res.push(x);
+    if (x !== null) { decided++; up += x; }
+    run.push(x === null ? null : up);
+    if (closedAt < 0 && x !== null && Math.abs(up) > n - (i + 1)) {
+      closedAt = i; closedUp = up; closedLeft = n - (i + 1);
+    }
+  }
+  const remaining = n - decided;
+  return { res, run, up, decided, remaining, ms,
+    closed: closedAt >= 0, closedAt, closedUp, closedLeft,
+    dormie: closedAt < 0 && up !== 0 && Math.abs(up) === remaining && remaining > 0 };
+}
+function matchLabel(st) { return st.up === 0 ? 'Iguales' : Math.abs(st.up) + (st.up > 0 ? ' arriba' : ' abajo'); }
+function matchShort(v) { return v === 0 ? 'AS' : Math.abs(v) + (v > 0 ? '↑' : '↓'); }
+function matchColor(v) { return v > 0 ? 'var(--good)' : v < 0 ? 'var(--bad)' : 'var(--text)'; }
+// Marcador final al estilo clásico: "3&2", "1 arriba", "Empate".
+function matchFinalText(st) {
+  if (st.closed) return Math.abs(st.closedUp) + '&' + st.closedLeft;
+  if (st.up === 0) return 'Empate';
+  return Math.abs(st.up) + (st.up > 0 ? ' arriba' : ' abajo');
+}
+// Una sola palabra para el marcador: Ganas / Pierdes / Empate / Sin terminar.
+function matchOutcomeWord(st) {
+  if (st.closed) return st.closedUp > 0 ? 'Ganas' : 'Pierdes';
+  if (st.remaining > 0) return st.decided ? 'Sin terminar' : '—';
+  return st.up === 0 ? 'Empate' : st.up > 0 ? 'Ganas' : 'Pierdes';
+}
+// Frase de resultado: "Ganas 3&2" / "Pierdes por 2" / "Empate" (o el estado si sigue vivo).
+function matchVerdict(st) {
+  const win = st.closed ? st.closedUp > 0 : st.up > 0;
+  if (st.closed) return (win ? 'Ganas ' : 'Pierdes ') + Math.abs(st.closedUp) + '&' + st.closedLeft;
+  if (st.remaining > 0) return matchLabel(st) + (st.dormie ? ' (dormie)' : '');
+  if (st.up === 0) return 'Empate';
+  return (win ? 'Ganas por ' : 'Pierdes por ') + Math.abs(st.up) + (Math.abs(st.up) === 1 ? ' hoyo' : ' hoyos');
 }
 
 /* ---------- Gráficos (offline SVG) ---------- */

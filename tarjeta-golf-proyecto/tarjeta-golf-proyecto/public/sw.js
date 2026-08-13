@@ -1,26 +1,20 @@
 /* Service worker de Tarjeta de Golf.
    Guarda una copia de la app (HTML, CSS, JS y librerías) para que arranque
    SIN COBERTURA una vez abierta al menos una vez con conexión.
-   Sube CACHE_VERSION cada vez que cambien los archivos para forzar la actualización. */
-const CACHE_VERSION = 'golf-v4';
 
-/* Núcleo imprescindible: sin esto la app no arranca. Si algo falla, falla la
-   instalación (y se reintenta en la siguiente visita). */
-const CRITICAL = [
+   ESTRATEGIA: app-shell atómico. Todo el "esqueleto" (index + CSS + todos los JS)
+   se guarda junto bajo una misma versión y se sirve SIEMPRE de la misma versión,
+   para que el HTML y el JavaScript NUNCA sean de generaciones distintas (eso
+   causaba la pantalla en blanco). Al cambiar archivos, sube CACHE_VERSION: el
+   nuevo worker borra la caché vieja entera y recarga la app limpia. */
+const CACHE_VERSION = 'golf-v19';
+
+/* Esqueleto propio: se guarda de forma atómica (o todo, o nada). Todos existen. */
+const SHELL = [
   './',
   './index.html',
   './manifest.json',
   './css/estilos.css',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/apple-touch-icon.png'
-];
-
-/* Resto de recursos (todos los JS, datos y librerías CDN). Se cachean con
-   tolerancia a fallos: si alguno da 404 (p.ej. un módulo en desarrollo) o la
-   CDN no responde, NO se aborta la instalación; el resto queda cacheado igual. */
-const OPTIONAL = [
-  './handicap.json',
   './js/nucleo.js',
   './js/datos.js',
   './js/comun.js',
@@ -33,6 +27,15 @@ const OPTIONAL = [
   './js/pantalla-gps.js',
   './js/buscador-mapa.js',
   './js/inicio.js',
+  './handicap.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/apple-touch-icon.png'
+];
+
+/* Librerías CDN (versión fija en la URL). Mejor esfuerzo: si alguna no responde
+   al instalar, NO abortamos; se cachean luego en la primera petición con red. */
+const CDN = [
   'https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js',
   'https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js',
@@ -43,17 +46,20 @@ const OPTIONAL = [
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
     const cache = await caches.open(CACHE_VERSION);
-    await cache.addAll(CRITICAL);
-    await Promise.allSettled(OPTIONAL.map(u => cache.add(u)));
-    self.skipWaiting();
+    await cache.addAll(SHELL);                                  // atómico: shell coherente
+    await Promise.allSettled(CDN.map(u => cache.add(u)));       // tolerante
+    await self.skipWaiting();
   })());
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k)));
+    await Promise.all(keys.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k))); // borra lo viejo
     await self.clients.claim();
+    // Recarga las ventanas abiertas para que dejen atrás cualquier copia rota.
+    const clients = await self.clients.matchAll({ type: 'window' });
+    for (const c of clients) { try { await c.navigate(c.url); } catch (_) {} }
   })());
 });
 
@@ -61,40 +67,35 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;                 // no tocamos escrituras (Firestore, etc.)
   const url = new URL(req.url);
-
-  // Navegación: intenta la red; si no hay, sirve el index cacheado (arranca offline).
-  if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).catch(() => caches.match('./index.html')));
-    return;
-  }
-
   const sameOrigin = url.origin === self.location.origin;
   const isCDN = url.host === 'www.gstatic.com' || url.host === 'unpkg.com';
 
-  // App shell propio: responde ya desde caché y refresca por detrás (stale-while-revalidate).
-  if (sameOrigin) { e.respondWith(staleWhileRevalidate(req)); return; }
-
-  // Librerías CDN (versión fija en la URL): primero caché, luego red.
-  if (isCDN) { e.respondWith(cacheFirst(req)); return; }
-
-  // Todo lo demás (teselas de mapa, Firestore/Auth de Google): red normal, sin interceptar.
+  // Navegación → sirve SIEMPRE el index de esta versión (coherente con su JS).
+  if (req.mode === 'navigate') {
+    e.respondWith(shellIndex());
+    return;
+  }
+  // Esqueleto propio y librerías CDN → primero caché (coherente), si no, red.
+  if (sameOrigin || isCDN) { e.respondWith(cacheFirst(req)); return; }
+  // Resto (teselas de mapa, Firestore/Auth de Google): red normal, sin interceptar.
 });
 
-async function staleWhileRevalidate(req) {
+async function shellIndex() {
   const cache = await caches.open(CACHE_VERSION);
-  const cached = await cache.match(req);
-  const network = fetch(req).then(res => {
-    if (res && res.ok) cache.put(req, res.clone());
-    return res;
-  }).catch(() => null);
-  return cached || (await network) || fetch(req);
+  const cached = (await cache.match('./index.html')) || (await cache.match('./'));
+  if (cached) return cached;
+  try { return await fetch('./index.html'); } catch (_) { return Response.error(); }
 }
 
 async function cacheFirst(req) {
   const cache = await caches.open(CACHE_VERSION);
   const cached = await cache.match(req);
   if (cached) return cached;
-  const res = await fetch(req);
-  if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone());
-  return res;
+  try {
+    const res = await fetch(req);
+    if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone());
+    return res;
+  } catch (_) {
+    return cached || Response.error();
+  }
 }

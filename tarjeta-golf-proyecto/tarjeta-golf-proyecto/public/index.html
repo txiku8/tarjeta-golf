@@ -1,6 +1,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Tarjeta de Golf</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#5b5be6">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Golf">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <script defer src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
 <script defer src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
@@ -101,6 +108,51 @@
   <div class="tk-rot" id="cardBody"></div>
 </div>
 
+<!-- ===== GPS DEL HOYO (estilo Hole19) ===== -->
+<div class="gpsview hidden" id="viewGps">
+  <canvas id="gpsCanvas"></canvas>
+  <svg class="gps-svg" id="gpsSvg"><polyline id="gpsLine" points=""></polyline><polyline id="gpsLineAim" points=""></polyline></svg>
+  <button class="gps-x" id="gpsClose" aria-label="Cerrar">✕</button>
+  <div class="gps-green" id="gpsGreen">
+    <div class="gg-row gg-mid"><b id="gpsMid">—</b><span>m al centro</span></div>
+    <span class="gg-tap">TOCA PARA AMPLIAR</span>
+  </div>
+  <div class="gps-edge" id="gpsBackDot"></div>
+  <div class="gps-edge" id="gpsFrontDot"></div>
+  <div class="gps-flag2" id="gpsFlag"></div>
+  <div class="gps-me2" id="gpsMe"><svg viewBox="0 0 24 24"><path d="M12 3l7 17-7-4-7 4z"></path></svg></div>
+  <div class="gps-aim" id="gpsAim"></div>
+  <div class="gps-badge" id="gpsAimBadge"><b id="gpsAimM">—</b><small id="gpsAimRest">—</small></div>
+  <div class="gps-note" id="gpsNote"></div>
+  <div class="gps-sheet hidden" id="gpsDist">
+    <div class="gs-top">
+      <div class="gs-acc">
+        <span class="gs-bars" id="gpsAccBars"><i></i><i></i><i></i></span>
+        <div class="gs-acc-txt"><small>PRECISIÓN DE GPS</small><b id="gpsAccTxt">buscando…</b></div>
+      </div>
+      <div class="gs-unit">Metros</div>
+    </div>
+    <div class="gs-nums">
+      <div class="gs-row" id="gpsRowBack"><small>TRASERA DEL GREEN</small>
+        <div class="gs-n"><b id="gpsDistBack">—</b><i>m</i></div></div>
+      <div class="gs-row gs-big"><small>CENTRO DEL GREEN</small>
+        <div class="gs-n"><b id="gpsDistMid">—</b><i>m</i></div></div>
+      <div class="gs-row" id="gpsRowFront"><small>FRENTE DEL GREEN</small>
+        <div class="gs-n"><b id="gpsDistFront">—</b><i>m</i></div></div>
+    </div>
+    <div class="gs-from" id="gpsDistFrom"></div>
+    <button class="gs-close" id="gpsDistClose" aria-label="Cerrar">⌄</button>
+  </div>
+  <div class="gps-hbar">
+    <button class="hb-nav" id="gpsPrev" aria-label="Hoyo anterior">‹</button>
+    <button class="hb-mid" id="gpsScoreBtn" aria-label="Apuntar resultado">
+      <div class="hb-line"><span class="hb-flag">⛳</span><span class="hb-no" id="gpsHbNo">1</span><span class="hb-meta" id="gpsHbMeta">PAR 4</span></div>
+      <div class="hb-edit">✎ Apuntar golpes</div>
+    </button>
+    <button class="hb-nav" id="gpsNext" aria-label="Hoyo siguiente">›</button>
+  </div>
+</div>
+
 <button class="map-fab hidden" id="mapFab">
   <svg viewBox="0 0 24 24"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"></polygon><line x1="9" y1="3" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="21"></line></svg>
   Mapa
@@ -150,11 +202,19 @@
 
 <script defer src="js/nucleo.js"></script>
 <script defer src="js/datos.js"></script>
+<script defer src="js/gps-datos.js"></script>
 <script defer src="js/comun.js"></script>
 <script defer src="js/navegacion.js"></script>
 <script defer src="js/pantalla-historial.js"></script>
 <script defer src="js/pantalla-rendimiento.js"></script>
 <script defer src="js/pantalla-jugar.js"></script>
+<script defer src="js/pantalla-gps.js"></script>
 <script defer src="js/pantalla-yo.js"></script>
 <script defer src="js/buscador-mapa.js"></script>
 <script defer src="js/inicio.js"></script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+</script>

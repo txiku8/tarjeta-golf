@@ -56,6 +56,9 @@ function startRound(course, opts) {
     pars, si, date: new Date().toISOString(),
     holeStart: from + 1, // nº del primer hoyo (para numerar 10-18 correctamente)
     mode: opts.mode || 'medal',
+    // Match play: bloque del rival con su propia tarjeta de golpes por hoyo.
+    match: (opts.mode === 'match' && opts.match)
+      ? Object.assign({}, opts.match, { holes: blankMatchHoles(pars.length) }) : null,
     hcp: opts.hcp != null ? opts.hcp : null,   // hándicap de juego (golpes) ya calculado/editado
     hcpIndex: opts.index != null ? opts.index : null, // índice exacto (informativo)
     barra: opts.barra || null,                 // barra jugada (informativo)
@@ -63,6 +66,8 @@ function startRound(course, opts) {
   };
   save(LS.active, active);
   openRound();
+  // Si el campo tiene datos GPS, abre directamente el mapa del hoyo al empezar la ronda.
+  if (typeof gpsAvailable === 'function' && gpsAvailable()) openGps();
 }
 function resumeRound(r) { active = JSON.parse(JSON.stringify(r)); active.saved = true; save(LS.active, active); openRound(); }
 
@@ -74,13 +79,18 @@ function openRound() {
   $('#viewRound').classList.remove('hidden');
   $('#roundBar').classList.remove('hidden');
   $('#rTitle').textContent = active.courseName;
-  const modeLbl = active.mode === 'stableford' ? 'Stableford' : 'Medal play';
-  const hcpLbl = active.hcp != null ? ' · ' + active.hcp + ' golpes' + (active.barra ? ' (' + active.barra + ')' : '') : '';
+  const mp = isMatch(active);
+  $('#viewRound').classList.toggle('match', mp);
+  const hcpLbl = mp ? matchSubLabel(active)
+    : (active.hcp != null ? ' · ' + active.hcp + ' golpes' + (active.barra ? ' (' + active.barra + ')' : '') : '');
   $('#rSub').textContent = (active.courseLoc ? active.courseLoc + ' · ' : '') + fmtDate(active.date) +
-    ' · ' + active.pars.length + ' hoyos · ' + modeLbl + hcpLbl;
+    ' · ' + active.pars.length + ' hoyos · ' + modeName(active) + hcpLbl;
   // hoyo activo del editor: el primero sin apuntar, o el primero
-  const firstEmpty = active.holes.findIndex(h => !h.strokes);
+  const firstEmpty = active.holes.findIndex((h, i) => !holeHasData(i));
   selHole = firstEmpty >= 0 ? firstEmpty : 0;
+  // Los hoyos ya apuntados (borrador reanudado o ronda completa) se muestran desde el principio.
+  shownHoles = new Set();
+  active.holes.forEach((h, i) => { if (holeHasData(i)) shownHoles.add(i); });
   renderRound();
   window.scrollTo(0, 0);
 }
@@ -96,10 +106,14 @@ function closeRound(toTab) {
 function renderSheetHoles() {
   const recv = golfStrokesReceived(active);
   const stb = active.mode === 'stableford';
+  const st = isMatch(active) ? matchState(active) : null;
   const box = $('#rsHoles');
   box.innerHTML = active.holes.map((h, i) => {
     const played = !!h.strokes;
-    const dots = (stb && recv[i] > 0) ? `<div class="sh-dots">${'•'.repeat(recv[i])}</div>` : `<div class="sh-dots empty"></div>`;
+    const res = st ? st.res[i] : null;
+    const dots = st
+      ? `<div class="sh-dots" style="color:${matchColor(res || 0)}">${res === null ? '' : res > 0 ? '▲' : res < 0 ? '▼' : '='}</div>`
+      : (stb && recv[i] > 0) ? `<div class="sh-dots">${'•'.repeat(recv[i])}</div>` : `<div class="sh-dots empty"></div>`;
     return `<button class="sh-hole ${i === selHole ? 'active' : ''}" data-i="${i}">
       <div class="sh-no tnum">${holeNo(i)}</div>
       <div class="sh-score tnum" style="${played ? `background:${scoreColor(h.strokes, active.pars[i])};color:#fff;border-color:transparent` : ''}">${h.strokes || '·'}</div>
@@ -107,7 +121,7 @@ function renderSheetHoles() {
     </button>`;
   }).join('');
   box.querySelectorAll('[data-i]').forEach(b => b.onclick = () => {
-    selHole = +b.dataset.i; renderEditor(); highlightSel(); closeRoundSheet(); window.scrollTo(0, 0);
+    selectHole(+b.dataset.i); closeRoundSheet(); window.scrollTo(0, 0);
   });
 }
 function openRoundSheet() {
@@ -124,6 +138,38 @@ function closeRoundSheet() {
 
 /* ===== Pantalla de ronda: tarjeta clásica (arriba) + editor de un hoyo (abajo) ===== */
 let selHole = 0;                 // índice del hoyo activo en el editor
+// Hoyos cuyo resultado YA se muestra en la tarjeta/totales de arriba. Un hoyo se "revela" al salir
+// de él (pasar a otro); el que se está editando no aparece arriba hasta entonces.
+let shownHoles = new Set();
+// Un hoyo tiene datos si hay golpes míos o, en match play, golpes del rival / hoyo concedido.
+function holeHasData(i) {
+  if (active.holes[i].strokes > 0) return true;
+  const m = active.match, mh = m && m.holes[i];
+  return !!(mh && (mh.strokes > 0 || mh.conc));
+}
+function isHoleShown(i) { return holeHasData(i) && (i !== selHole || shownHoles.has(i)); }
+// Copia de la ronda con SOLO los hoyos ya revelados (el que se edita no cuenta arriba todavía).
+function shownRound() {
+  const blank = { strokes: 0, putts: 0, fir: null, pen: 0, bunker: false };
+  const r = Object.assign({}, active, { holes: active.holes.map((h, i) => isHoleShown(i) ? h : blank) });
+  if (active.match) r.match = Object.assign({}, active.match,
+    { holes: active.match.holes.map((mh, i) => isHoleShown(i) ? mh : { strokes: 0, conc: null }) });
+  return r;
+}
+function modeName(r) { return r.mode === 'stableford' ? 'Stableford' : r.mode === 'match' ? 'Match play' : 'Medal play'; }
+// " vs Rival · a scratch / recibes 3 / das 2"
+function matchSubLabel(r) {
+  const m = r.match; if (!m) return '';
+  const g = Math.round(m.give || 0);
+  const v = m.scratch ? 'a scratch' : g === 0 ? 'sin ventaja' : g > 0 ? 'recibes ' + g : 'das ' + (-g);
+  return ' vs ' + m.rival + ' · ' + v;
+}
+// Cambia de hoyo revelando el que se abandona y refrescando tarjeta + editor + totales.
+function selectHole(i) {
+  if (holeHasData(selHole)) shownHoles.add(selHole);
+  selHole = i;
+  renderRound();
+}
 const PICK_MIN = 1, PICK_MAX = 12, PICK_ITEM = 64; // selector de golpes deslizable
 let pickEl = null, pickLock = false, pickRaf = 0;
 const MP_ITEM = 34;              // ancho de cada número en los mini-selectores (putts/penal)
@@ -151,7 +197,6 @@ function renderRound() { renderScorecard(); renderEditor(); updateTotals(); }
 function renderScorecard() {
   const recv = golfStrokesReceived(active);
   const stb = active.mode === 'stableford';
-  const t = roundTotals(active);
   const idxs = active.holes.map((_, i) => i);
   const frontIdx = idxs.filter(i => holeNo(i) <= 9);   // primeros nueve (OUT)
   const backIdx = idxs.filter(i => holeNo(i) >= 10);    // segundos nueve (IN)
@@ -180,8 +225,9 @@ function renderScorecard() {
 
   const fPar = i => active.pars[i];
   const fMyPar = i => active.pars[i] + recv[i];
-  const fStr = i => active.holes[i].strokes || 0;
-  const fPts = i => active.holes[i].strokes ? holePoints(i, recv) : 0;
+  // Solo suman los hoyos ya revelados; el hoyo en edición no cuenta hasta salir de él.
+  const fStr = i => isHoleShown(i) ? active.holes[i].strokes : 0;
+  const fPts = i => isHoleShown(i) ? holePoints(i, recv) : 0;
 
   const parRow = `<tr class="par"><td class="rh">Par</td>${assemble(
     i => `<td class="tnum">${active.pars[i]}</td>`,
@@ -189,30 +235,68 @@ function renderScorecard() {
   const myParRow = stb ? `<tr class="mypar"><td class="rh">Mi par</td>${assemble(
     i => `<td class="tnum">${active.pars[i] + recv[i]}</td>`,
     sumOver(frontIdx, fMyPar), sumOver(backIdx, fMyPar), sumOver(idxs, fMyPar))}</tr>` : '';
-  const goRow = `<tr><td class="rh">Golpes</td>${assemble(
-    i => `<td class="go"><button data-i="${i}" class="${active.holes[i].strokes ? 'has' : ''} ${i === selHole ? 'sel' : ''}" style="${active.holes[i].strokes ? `background:${scoreColor(active.holes[i].strokes, active.pars[i])}` : ''}">${active.holes[i].strokes || '·'}</button></td>`,
-    dash(sumOver(frontIdx, fStr)), dash(sumOver(backIdx, fStr)), dash(t.strokes))}</tr>`;
+  const goRow = `<tr><td class="rh">${isMatch(active) ? 'Yo' : 'Golpes'}</td>${assemble(
+    i => { const on = isHoleShown(i) && active.holes[i].strokes > 0;
+      const mh = active.match && active.match.holes[i];
+      if (!on && mh && mh.conc === 'me' && isHoleShown(i))
+        return `<td class="go"><button data-i="${i}" class="conc ${i === selHole ? 'sel' : ''}">✕</button></td>`;
+      return `<td class="go"><button data-i="${i}" class="${on ? 'has' : ''} ${i === selHole ? 'sel' : ''}" style="${on ? `background:${scoreColor(active.holes[i].strokes, active.pars[i])}` : ''}">${on ? active.holes[i].strokes : '·'}</button></td>`; },
+    dash(sumOver(frontIdx, fStr)), dash(sumOver(backIdx, fStr)), dash(sumOver(idxs, fStr)))}</tr>`;
   const ptsRow = stb ? `<tr class="pts"><td class="rh">Pts</td>${assemble(
-    i => `<td class="tnum">${active.holes[i].strokes ? holePoints(i, recv) : '·'}</td>`,
-    sumOver(frontIdx, fPts), sumOver(backIdx, fPts), t.stb)}</tr>` : '';
+    i => `<td class="tnum">${isHoleShown(i) ? holePoints(i, recv) : '·'}</td>`,
+    sumOver(frontIdx, fPts), sumOver(backIdx, fPts), sumOver(idxs, fPts))}</tr>` : '';
+
+  // --- Filas propias del match play: ventaja, tarjeta del rival y estado del partido ---
+  let matchRows = '';
+  if (isMatch(active)) {
+    const m = active.match, st = matchState(shownRound());
+    const give = Math.round(m.give || 0);
+    const rvName = esc(m.rival.split(' ')[0].slice(0, 7));
+    const fRiv = i => isHoleShown(i) ? (m.holes[i].strokes || 0) : 0;
+    const ventRow = (!m.scratch && give !== 0) ? (() => {
+      const who = give > 0 ? 'me' : 'rival';
+      const fV = i => st.ms[who][i];
+      return `<tr class="mypar"><td class="rh">Vent. ${give > 0 ? 'yo' : rvName}</td>${assemble(
+        i => `<td class="tnum">${st.ms[who][i] || '·'}</td>`,
+        dash(sumOver(frontIdx, fV)), dash(sumOver(backIdx, fV)), dash(sumOver(idxs, fV)))}</tr>`;
+    })() : '';
+    const rivalRow = `<tr><td class="rh">${rvName}</td>${assemble(
+      i => { const mh = m.holes[i], on = isHoleShown(i);
+        if (on && !mh.strokes && mh.conc === 'rival')
+          return `<td class="go"><button data-i="${i}" class="conc ${i === selHole ? 'sel' : ''}">✕</button></td>`;
+        return `<td class="go"><button data-i="${i}" class="${on && mh.strokes ? 'has' : ''} ${i === selHole ? 'sel' : ''}" style="${on && mh.strokes ? `background:${scoreColor(mh.strokes, active.pars[i])}` : ''}">${on && mh.strokes ? mh.strokes : '·'}</button></td>`; },
+      dash(sumOver(frontIdx, fRiv)), dash(sumOver(backIdx, fRiv)), dash(sumOver(idxs, fRiv)))}</tr>`;
+    // Estado acumulado tras cada hoyo (1↑, AS, 2↓…) y el vigente al cerrar cada nueve.
+    const lastRun = arr => { let v = null; arr.forEach(i => { if (st.run[i] !== null) v = st.run[i]; }); return v; };
+    const cellRun = v => v === null ? '–' : `<span style="color:${matchColor(v)}">${matchShort(v)}</span>`;
+    const stRow = `<tr class="mrow"><td class="rh">Match</td>${assemble(
+      i => `<td class="tnum">${st.run[i] === null ? '·' : cellRun(st.run[i])}</td>`,
+      cellRun(lastRun(frontIdx)), cellRun(lastRun(backIdx)), cellRun(lastRun(idxs)))}</tr>`;
+    matchRows = ventRow + rivalRow + stRow;
+  }
 
   $('#scGrid').innerHTML = `
     <thead><tr><th class="rh">Hoyo</th>${head}</tr></thead>
-    <tbody>${parRow}${myParRow}${goRow}${ptsRow}</tbody>`;
-  $('#scGrid').querySelectorAll('[data-i]').forEach(b => b.onclick = () => { selHole = +b.dataset.i; renderEditor(); highlightSel(); });
-}
-function highlightSel() {
-  $('#scGrid').querySelectorAll('[data-i]').forEach(b => b.classList.toggle('sel', +b.dataset.i === selHole));
+    <tbody>${parRow}${myParRow}${goRow}${matchRows}${ptsRow}</tbody>`;
+  $('#scGrid').querySelectorAll('[data-i]').forEach(b => b.onclick = () => selectHole(+b.dataset.i));
 }
 
 // --- Etiqueta de resultado (chip + puntos del hoyo) ---
 function scoreRightHtml(i, recv) {
   const h = active.holes[i], par = active.pars[i];
-  if (!h.strokes) return `<div class="chip" style="background:var(--muted)">Sin apuntar</div>`;
+  const chip = h.strokes
+    ? `<div class="chip" style="background:${scoreColor(h.strokes, par)}">${scoreLabelTxt(h.strokes - par)}</div>`
+    : `<div class="chip" style="background:var(--muted)">Sin apuntar</div>`;
+  if (isMatch(active)) {
+    const res = matchHoleResult(active, i);
+    const txt = res === null ? '' : res > 0 ? 'Ganas el hoyo' : res < 0 ? 'Pierdes el hoyo' : 'Empatado';
+    return chip + (res === null ? '' : `<div class="hpts"><b style="color:${matchColor(res)}">${txt}</b></div>`);
+  }
+  if (!h.strokes) return chip;
   const stb = active.mode === 'stableford';
   const hp = stb ? holePoints(i, recv) : null;
   const pts = stb ? `<div class="hpts"><b>${hp} pt${hp === 1 ? '' : 's'}</b></div>` : '';
-  return `<div class="chip" style="background:${scoreColor(h.strokes, par)}">${scoreLabelTxt(h.strokes - par)}</div>${pts}`;
+  return chip + pts;
 }
 function updateGir() { const el = $('#girBadge'); if (el) el.className = girClass(selHole); }
 
@@ -246,8 +330,10 @@ function renderEditor() {
   const i = selHole, h = active.holes[i], par = active.pars[i];
   const recv = golfStrokesReceived(active);
   const stb = active.mode === 'stableford';
-  const r = recv[i];
-  const dots = (stb && r > 0) ? `<div class="hdots" title="${r} golpe(s) que da el hándicap aquí">${'•'.repeat(r)}</div>` : '';
+  const mp = isMatch(active);
+  const ms = mp ? matchStrokes(active) : null;
+  const r = mp ? ms.me[i] : recv[i];
+  const dots = ((stb || mp) && r > 0) ? `<div class="hdots" title="${r} golpe(s) que da el hándicap aquí">${'•'.repeat(r)}</div>` : '';
   const meta2 = (!stb && active.si && active.si[i]) ? `<div class="hcp none">índice ${active.si[i]}</div>` : '';
   const par3 = par <= 3;
   const calleHtml = `
@@ -265,6 +351,21 @@ function renderEditor() {
         <button data-bunker class="sand ${h.bunker ? 'on' : ''}">⛱ Estuve en bunker</button>
       </div>
     </div>`;
+  // Bloque del rival (solo en match play): sus golpes en el hoyo y las concesiones.
+  const mh = mp ? active.match.holes[i] : null;
+  const mpHtml = !mp ? '' : `
+    <div class="mp-block">
+      <div class="sub mp-row">
+        <span class="k">${esc(active.match.rival)}${ms.rival[i] > 0 ? ` <i class="rdots">${'•'.repeat(ms.rival[i])}</i>` : ''}</span>
+        ${miniPickerHtml('rivalPick', 0, PICK_MAX)}
+      </div>
+      <div class="calle mp-conc">
+        <div class="segc">
+          <button data-conc="rival" class="win ${mh.conc === 'rival' ? 'on' : ''}">Me lo concede</button>
+          <button data-conc="me" class="lose ${mh.conc === 'me' ? 'on' : ''}">Se lo concedo</button>
+        </div>
+      </div>
+    </div>`;
   const nums = [];
   for (let x = PICK_MIN; x <= PICK_MAX; x++) nums.push(`<div class="num tnum" data-x="${x}">${x}</div>`);
   $('#holeEditor').innerHTML = `
@@ -274,6 +375,7 @@ function renderEditor() {
       <div class="${girClass(i)}" id="girBadge" title="Green en regulación">GIR</div>
       <div class="ed-score">${scoreRightHtml(i, recv)}</div>
     </div>
+    ${gpsAvailable() ? '<button class="gps-open" id="btnGps"><span class="go-ic">📍</span> Ver mapa GPS del hoyo</button>' : ''}
     <div class="pick-lab">Golpes</div>
     <div class="hpick-wrap"><div class="hpick-sel"></div><div class="hpick" id="hpick">${nums.join('')}</div></div>
     <div class="pick-hint"><span>‹ desliza el número ›</span></div>
@@ -281,6 +383,7 @@ function renderEditor() {
       <div class="sub"><span class="k">Putts</span>${miniPickerHtml('puttsPick', 0, 6)}</div>
       <div class="sub"><span class="k">Penal.</span>${miniPickerHtml('penalPick', 0, 5)}</div>
     </div>
+    ${mpHtml}
     ${calleHtml}
     <div class="ed-nav"></div>`;
 
@@ -319,6 +422,27 @@ function renderEditor() {
     bk.classList.toggle('on', active.holes[i].bunker);
     markDirty();
   };
+  if (mp) {
+    // Refresca lo que depende del partido sin reconstruir el editor (no corta el gesto de deslizar).
+    const refreshMatch = () => {
+      const right = $('#holeEditor').querySelector('.ed-score');
+      if (right) right.innerHTML = scoreRightHtml(i, recv);
+      updateNav(); renderScorecard(); updateTotals(); markDirty(); checkMatchClose();
+    };
+    wireMiniPicker('rivalPick', 0, PICK_MAX, mh.strokes || 0, v => {
+      mh.strokes = v;
+      if (v > 0 && mh.conc) { mh.conc = null; paintConc(); } // apuntar golpes anula la concesión
+      refreshMatch();
+    });
+    const concBtns = ed.querySelectorAll('[data-conc]');
+    const paintConc = () => concBtns.forEach(b => b.classList.toggle('on', b.dataset.conc === mh.conc));
+    concBtns.forEach(b => b.onclick = () => {
+      mh.conc = mh.conc === b.dataset.conc ? null : b.dataset.conc;
+      paintConc(); refreshMatch();
+    });
+  }
+  const gp = ed.querySelector('#btnGps');
+  if (gp) gp.onclick = openGps;
   updateNav();
 }
 
@@ -326,16 +450,17 @@ function renderEditor() {
 function updateNav() {
   const nav = $('#holeEditor .ed-nav'); if (!nav) return;
   const i = selHole, last = active.holes.length - 1;
-  const allDone = active.holes.every(x => x.strokes > 0);
+  // En match play el partido puede acabarse antes del 18: al cerrarse, el botón pasa a guardar.
+  const st = isMatch(active) ? matchState(active) : null;
+  const closedHere = !!(st && st.closed && i >= st.closedAt);
+  const allDone = active.holes.every((x, k) => holeHasData(k)) || closedHere;
   nav.innerHTML = `
     <button data-nav="-1" ${i === 0 ? 'disabled' : ''}>‹ Anterior</button>
     ${allDone
-      ? `<button class="next save" data-save>Guardar partida ✓</button>`
+      ? `<button class="next save" data-save>${closedHere ? 'Terminar partido ✓' : 'Guardar partida ✓'}</button>`
       : `<button class="next" data-nav="1" ${i === last ? 'disabled' : ''}>Siguiente hoyo ›</button>`}`;
-  nav.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => {
-    selHole = Math.max(0, Math.min(last, selHole + (+b.dataset.nav)));
-    renderEditor(); highlightSel();
-  });
+  nav.querySelectorAll('[data-nav]').forEach(b => b.onclick = () =>
+    selectHole(Math.max(0, Math.min(last, selHole + (+b.dataset.nav)))));
   const sb = nav.querySelector('[data-save]');
   if (sb) sb.onclick = saveRound;
 }
@@ -365,6 +490,12 @@ function setScore(x) {
   const i = selHole, h = active.holes[i];
   if (h.strokes === x) { paintPick(x); return; }
   h.strokes = x;
+  // Si apunto mis golpes, el hoyo ya no está concedido por mí.
+  const mh = active.match && active.match.holes[i];
+  if (mh && mh.conc === 'me') {
+    mh.conc = null;
+    const cb = $('#holeEditor').querySelector('[data-conc="me"]'); if (cb) cb.classList.remove('on');
+  }
   if (h.putts > x - 1) h.putts = Math.max(0, x - 1);
   paintPick(x);
   const recv = golfStrokesReceived(active);
@@ -376,31 +507,64 @@ function setScore(x) {
   renderScorecard();
   updateTotals();
   markDirty();
+  checkMatchClose();
 }
 
 function markDirty() { active.dirty = true; save(LS.active, active); }
+// Avisa una sola vez cuando la ventaja supera a los hoyos que quedan (el clásico "3&2").
+function checkMatchClose() {
+  if (!isMatch(active)) return;
+  const st = matchState(active);
+  if (st.closed && !active.match.done) { active.match.done = true; toast('Partido cerrado · ' + matchVerdict(st)); save(LS.active, active); }
+  else if (!st.closed && active.match.done) { active.match.done = false; save(LS.active, active); }
+}
 
 // Totales de arriba. En Stableford el hero es Puntos; en Medal, los Golpes totales.
 // Junto al hero: Vs Par personal (con los golpes del hándicap) y Vs Par del campo.
 function updateTotals() {
   if (!active) return;
-  const t = roundTotals(active);
+  // Match play: el hero es el estado del partido (2↑ / Iguales / 3&2 al cerrarse).
+  if (isMatch(active)) {
+    const st = matchState(shownRound());
+    let mine = 0, his = 0;
+    active.holes.forEach((h, i) => {
+      if (!isHoleShown(i)) return;
+      mine += h.strokes; his += active.match.holes[i].strokes || 0;
+    });
+    const val = st.closed ? matchFinalText(st) : (st.up === 0 ? 'Iguales' : matchShort(st.up));
+    const bg = st.up > 0 ? 'var(--good)' : st.up < 0 ? 'var(--bad)' : '';
+    $('#totstrip').innerHTML = [
+      `<div class="ts-cell hero"${bg ? ` style="background:${bg}"` : ''}><div class="tk">Partido<small>${esc(active.match.rival)}</small></div><div class="tv tnum">${val}</div></div>`,
+      `<div class="ts-cell"><div class="tk">Golpes<small>yo · rival</small></div><div class="tv tnum">${mine}–${his}</div></div>`,
+      `<div class="ts-cell"><div class="tk">Quedan<small>${st.dormie ? 'dormie' : 'hoyos'}</small></div><div class="tv tnum">${st.remaining}</div></div>`,
+    ].join('');
+    return;
+  }
   const recv = golfStrokesReceived(active);
   const stb = active.mode === 'stableford';
   const hasHcp = (active.hcp || 0) > 0;
-  let vsYo = 0;
-  active.holes.forEach((h, i) => { if (h.strokes > 0) vsYo += h.strokes - (active.pars[i] + recv[i]); });
+  // Los totales de arriba solo cuentan hoyos ya revelados; el hoyo en edición aún no suma.
+  let strokes = 0, par = 0, stbPts = 0, vsYo = 0;
+  active.holes.forEach((h, i) => {
+    if (!isHoleShown(i)) return;
+    strokes += h.strokes; par += active.pars[i];
+    stbPts += holePoints(i, recv);
+    vsYo += h.strokes - (active.pars[i] + recv[i]);
+  });
+  const vsPar = strokes - par;
   const cells = [];
-  cells.push(`<div class="ts-cell hero"><div class="tk">${stb ? 'Puntos' : 'Golpes'}</div><div class="tv tnum">${stb ? t.stb : (t.strokes || 0)}</div></div>`);
+  cells.push(`<div class="ts-cell hero"><div class="tk">${stb ? 'Puntos' : 'Golpes'}</div><div class="tv tnum">${stb ? stbPts : strokes}</div></div>`);
   if (hasHcp) cells.push(`<div class="ts-cell"><div class="tk">Vs Par<small>yo · hcp ${fmtHcp(active.hcp)}</small></div><div class="tv tnum" style="color:${vsColor(vsYo)}">${fmtVsPar(vsYo)}</div></div>`);
-  cells.push(`<div class="ts-cell"><div class="tk">Vs Par<small>campo</small></div><div class="tv tnum" style="color:${vsColor(t.vsPar)}">${fmtVsPar(t.vsPar)}</div></div>`);
+  cells.push(`<div class="ts-cell"><div class="tk">Vs Par<small>campo</small></div><div class="tv tnum" style="color:${vsColor(vsPar)}">${fmtVsPar(vsPar)}</div></div>`);
   $('#totstrip').innerHTML = cells.join('');
 }
 function fmtHcp(h) { return Number.isInteger(h) ? String(h) : String(h).replace('.', ','); }
 
 function saveRound() {
   const t = roundTotals(active);
-  if (!t.played) { toast('Apunta al menos un hoyo'); return; }
+  // En match play vale con que haya hoyos decididos (puede haberlos concedidos, sin golpes).
+  const anyMatch = isMatch(active) && active.holes.some((h, i) => holeHasData(i));
+  if (!t.played && !anyMatch) { toast('Apunta al menos un hoyo'); return; }
   const rec = JSON.parse(JSON.stringify(active));
   delete rec.dirty; rec.saved = true;
   const idx = rounds.findIndex(r => r.id === rec.id);
@@ -467,8 +631,9 @@ function renderSummary(r, fromHistory) {
   const showSplit = frontIdx.length > 0 && backIdx.length > 0;
   const out = sub(frontIdx), inn = sub(backIdx);
 
-  const modeLbl = stb ? 'Stableford' : 'Medal play';
-  const hcpLbl = hasHcp ? ' · hcp ' + fmtHcp(r.hcp) : '';
+  const modeLbl = modeName(r);
+  const mst = isMatch(r) ? matchState(r) : null;
+  const hcpLbl = mst ? matchSubLabel(r) : (hasHcp ? ' · hcp ' + fmtHcp(r.hcp) : '');
 
   const mut = 'var(--muted)';
   const vsChip = (lbl, v) =>
@@ -478,13 +643,35 @@ function renderSummary(r, fromHistory) {
   const splitRow = (lbl, o) =>
     `<tr><td class="rh">${lbl}</td><td class="tnum">${o.g}</td><td class="tnum" style="color:${vsColor(o.g - o.p)}">${fmtVsPar(o.g - o.p)}</td></tr>`;
 
-  $('#sumBody').innerHTML = `
-    <div class="sum-top">
-      <div class="sum-badge">Partida guardada ✓</div>
-      <div class="sum-course">${esc(r.courseName)}</div>
-      <div class="sum-meta">${(r.courseLoc ? esc(r.courseLoc) + ' · ' : '')}${fmtDate(r.date)} · ${t.played} hoyos · ${modeLbl}${hcpLbl}</div>
-    </div>
-
+  // Hero del match play: marcador final (3&2 / 1 arriba / Empate) y quién gana.
+  let heroHtml, matchSec = '';
+  if (mst) {
+    const fin = mst.closed ? mst.closedUp : mst.up;
+    const bg = fin > 0 ? 'var(--good)' : fin < 0 ? 'var(--bad)' : '';
+    const rivStrokes = r.match.holes.reduce((a, mh) => a + (mh.strokes || 0), 0);
+    const cnt = x => mst.res.filter(v => v === x).length;
+    heroHtml = `
+    <div class="sum-hero"${bg ? ` style="background:${bg}"` : ''}>
+      <div class="sh-main">
+        <div class="k">Partido</div>
+        <div class="v tnum">${matchFinalText(mst)}</div>
+        <div class="s">vs ${esc(r.match.rival)}</div>
+      </div>
+      <div class="sh-vs">
+        <div class="svs"><span class="k">Resultado</span><span class="v vtxt">${matchOutcomeWord(mst)}</span></div>
+        ${vsChip('Vs par campo', t.vsPar)}
+      </div>
+    </div>`;
+    matchSec = `
+    <div class="sum-sec">Partido</div>
+    <div class="mgrid2">
+      ${mtile('Hoyos ganados', cnt(1), 'de ' + mst.decided + ' jugados', 'flag', 'var(--good)')}
+      ${mtile('Empatados', cnt(0), 'halved', 'ring', mut)}
+      ${mtile('Perdidos', cnt(-1), r.match.rival, 'warn', 'var(--bad)')}
+      ${mtile('Golpes', t.strokes + '–' + rivStrokes, 'yo · ' + esc(r.match.rival), 'chart', 'var(--info)', mut)}
+    </div>`;
+  } else {
+    heroHtml = `
     <div class="sum-hero">
       <div class="sh-main">
         <div class="k">${stb ? 'Puntos' : 'Golpes'}</div>
@@ -495,7 +682,18 @@ function renderSummary(r, fromHistory) {
         ${vsChip('Vs par campo', t.vsPar)}
         ${hasHcp ? vsChip('Vs par (hcp)', vsYo) : ''}
       </div>
+    </div>`;
+  }
+
+  $('#sumBody').innerHTML = `
+    <div class="sum-top">
+      <div class="sum-badge">${mst ? 'Partido guardado ✓' : 'Partida guardada ✓'}</div>
+      <div class="sum-course">${esc(r.courseName)}</div>
+      <div class="sum-meta">${(r.courseLoc ? esc(r.courseLoc) + ' · ' : '')}${fmtDate(r.date)} · ${t.played} hoyos · ${modeLbl}${hcpLbl}</div>
     </div>
+
+    ${heroHtml}
+    ${matchSec}
 
     <div class="sum-sec">Resultados</div>
     <div class="dist-bar">${segs.filter(s => s[1]).map(s => `<span style="width:${(s[1] / totH * 100).toFixed(1)}%;background:${s[2]}"></span>`).join('')}</div>
@@ -611,11 +809,30 @@ function renderRoundCard(r) {
     i => `<td class="tnum">${r.pars[i]}</td>`,
     sumOver(frontIdx, i => r.pars[i]), sumOver(backIdx, i => r.pars[i]), sumOver(idxs, i => r.pars[i]))}</tr>`;
 
-  const goRow = `<tr class="tk-go"><td class="tk-rh">Golpes</td>${assemble(
+  const mst = isMatch(r) ? matchState(r) : null;
+  const conc = i => mst && r.match.holes[i].conc;
+  const goRow = `<tr class="tk-go"><td class="tk-rh">${mst ? 'Yo' : 'Golpes'}</td>${assemble(
     i => played(i)
       ? `<td><span class="tk-ball" style="background:${scoreColor(r.holes[i].strokes, r.pars[i])}">${r.holes[i].strokes}</span></td>`
-      : `<td><span class="tk-ball empty">·</span></td>`,
+      : `<td><span class="tk-ball empty">${conc(i) === 'me' ? '✕' : '·'}</span></td>`,
     dash(sumOver(frontIdx, i => r.holes[i].strokes || 0)), dash(sumOver(backIdx, i => r.holes[i].strokes || 0)), dash(t.strokes))}</tr>`;
+
+  // Filas del rival y del estado del partido (solo en match play).
+  let mRows = '';
+  if (mst) {
+    const m = r.match, rv = i => m.holes[i].strokes || 0;
+    const rvName = esc(m.rival.split(' ')[0].slice(0, 8));
+    const lastRun = arr => { let v = null; arr.forEach(i => { if (mst.run[i] !== null) v = mst.run[i]; }); return v; };
+    const cellRun = v => v === null ? '–' : `<span style="color:${matchColor(v)}">${matchShort(v)}</span>`;
+    mRows = `<tr class="tk-go"><td class="tk-rh">${rvName}</td>${assemble(
+      i => rv(i)
+        ? `<td><span class="tk-ball" style="background:${scoreColor(rv(i), r.pars[i])}">${rv(i)}</span></td>`
+        : `<td><span class="tk-ball empty">${conc(i) === 'rival' ? '✕' : '·'}</span></td>`,
+      dash(sumOver(frontIdx, rv)), dash(sumOver(backIdx, rv)), dash(sumOver(idxs, rv)))}</tr>`
+      + `<tr class="tk-min"><td class="tk-rh">Match</td>${assemble(
+        i => `<td class="tnum">${mst.run[i] === null ? '·' : cellRun(mst.run[i])}</td>`,
+        cellRun(lastRun(frontIdx)), cellRun(lastRun(backIdx)), cellRun(lastRun(idxs)))}</tr>`;
+  }
 
   const puttRow = `<tr class="tk-min"><td class="tk-rh">Putts</td>${assemble(
     i => `<td class="tnum">${played(i) ? r.holes[i].putts : '·'}</td>`,
@@ -625,9 +842,9 @@ function renderRoundCard(r) {
     i => `<td class="tnum">${played(i) ? pts(i) : '·'}</td>`,
     sumOver(frontIdx, pts), sumOver(backIdx, pts), t.stb)}</tr>` : '';
 
-  const modeLbl = stb ? 'Stableford' : 'Medal play';
-  const resultVal = stb ? t.stb : t.strokes;
-  const resultSub = stb ? t.strokes + ' golpes' : t.stb + ' pts';
+  const modeLbl = modeName(r) + (mst ? ' vs ' + esc(r.match.rival) : '');
+  const resultVal = mst ? matchFinalText(mst) : stb ? t.stb : t.strokes;
+  const resultSub = mst ? matchOutcomeWord(mst) + ' · ' + t.strokes + ' golpes' : stb ? t.strokes + ' golpes' : t.stb + ' pts';
 
   const legend = [['Eagle', 'var(--eagle)'], ['Birdie', 'var(--birdie)'], ['Par', 'var(--par)'], ['Bogey', 'var(--bogey)'], ['Doble+', 'var(--double)']];
 
@@ -649,7 +866,7 @@ function renderRoundCard(r) {
     <div class="tk-table-wrap">
       <table class="tk-grid">
         <thead><tr>${head}</tr></thead>
-        <tbody>${parRow}${goRow}${puttRow}${ptsRow}</tbody>
+        <tbody>${parRow}${goRow}${mRows}${puttRow}${ptsRow}</tbody>
       </table>
     </div>
     <div class="tk-legend">${legend.map(l => `<span><i style="background:${l[1]}"></i>${l[0]}</span>`).join('')}</div>`;

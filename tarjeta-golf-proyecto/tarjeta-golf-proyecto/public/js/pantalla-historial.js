@@ -8,7 +8,10 @@ function renderHistorial() {
   }
   rounds.forEach(r => {
     const t = roundTotals(r);
-    const cls = t.vsPar < 0 ? 'up' : t.vsPar > 0 ? 'dn' : '';
+    // En match play la fila muestra el marcador del partido (3&2, 1 arriba…) en vez del vs par.
+    const mst = isMatch(r) ? matchState(r) : null;
+    const mUp = mst ? (mst.closed ? mst.closedUp : mst.up) : 0;
+    const cls = mst ? (mUp > 0 ? 'up' : mUp < 0 ? 'dn' : '') : (t.vsPar < 0 ? 'up' : t.vsPar > 0 ? 'dn' : '');
     const item = el('div', 'round-item');
     const del = el('button', 'round-delete', 'Borrar');
     del.onclick = (e) => { e.stopPropagation(); deleteRound(r.id); };
@@ -17,9 +20,9 @@ function renderHistorial() {
       <div class="round-score tnum">${t.strokes}</div>
       <div class="round-info">
         <div class="n">${esc(r.courseName)}</div>
-        <div class="d">${fmtDate(r.date)} · ${t.played} hoyos · ${t.putts} putts</div>
+        <div class="d">${fmtDate(r.date)} · ${t.played} hoyos · ${mst ? 'vs ' + esc(r.match.rival) : t.putts + ' putts'}</div>
       </div>
-      <span class="pill ${cls}">${fmtVsPar(t.vsPar)}</span>`;
+      <span class="pill ${cls}">${mst ? matchFinalText(mst) : fmtVsPar(t.vsPar)}</span>`;
     attachRowSwipe(item, row, del, () => showRoundSummary(r, true));
     item.appendChild(del);
     item.appendChild(row);
