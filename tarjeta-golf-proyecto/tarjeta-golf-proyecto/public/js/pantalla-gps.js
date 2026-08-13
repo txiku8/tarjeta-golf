@@ -316,18 +316,11 @@ function gpsLayout() {
   const pF = gpsProject(h.c[0], h.c[1]);
   const flag = $('#gpsFlag'); flag.style.left = pF.x + 'px'; flag.style.top = pF.y + 'px';
 
-  // Sobre el mapa se muestra SOLO la distancia al centro; frente y fondo van en el panel grande.
+  // Sobre el mapa, SOLO el centro del green (cifra y bandera). Frente y fondo van en el panel grande.
   const g = gpsGreenFCB(h, origin);
   $('#gpsMid').textContent = gpsM(origin, g.c);
-  const edge = (ll, dotSel) => {
-    const dot = $(dotSel);
-    if (ll) {
-      const p = gpsProject(ll[0], ll[1]);
-      dot.style.display = 'block'; dot.style.left = p.x + 'px'; dot.style.top = p.y + 'px';
-    } else dot.style.display = 'none';
-  };
-  edge(g.f, '#gpsFrontDot');
-  edge(g.b, '#gpsBackDot');
+  $('#gpsFrontDot').style.display = 'none';
+  $('#gpsBackDot').style.display = 'none';
   if (gpsDistOn) gpsPintaDist(g, origin, playing);
 
   const me = $('#gpsMe');
