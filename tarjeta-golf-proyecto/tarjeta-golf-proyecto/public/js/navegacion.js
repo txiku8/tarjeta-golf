@@ -124,7 +124,9 @@ function playCatalog(c) { openRoundConfig(catalogToCourse(c)); }
 // El hándicap de juego (golpes totales) se calcula de la tabla de slope del campo con la fórmula
 // WHS al 95% (Medal/Stableford):  golpes = redondear( 95% · [ índice × SR/113 + (CR − Par) ] ).
 // En 9 hoyos se divide entre 2. El resultado sigue siendo editable a mano.
-const HCP_ALLOWANCE = 0.95; // asignación Medal/Stableford individual (RFEG/WHS)
+const HCP_ALLOWANCE = 0.95;       // asignación Medal/Stableford individual (RFEG/WHS)
+const FB_STB_ALLOWANCE = 0.85;    // fourball mejor bola (stableford): 85% del hándicap de cada uno
+const FB_MATCH_ALLOWANCE = 0.90;  // fourball match play: 90% de la diferencia con el hándicap más bajo
 function openRoundConfig(course) {
   const nH = course.pars.length;
   const has18 = nH >= 18;
@@ -168,10 +170,11 @@ function openRoundConfig(course) {
         </div>
         <div class="rc-modo">
           <span class="k">Modo de juego</span>
-          <div class="seg rc-seg rc-seg3" id="rcMode">
+          <div class="seg rc-seg rc-seg4" id="rcMode">
             <button type="button" data-m="stableford" class="on">Stableford</button>
             <button type="button" data-m="medal">Medal</button>
-            <button type="button" data-m="match">Match play</button>
+            <button type="button" data-m="match">Match</button>
+            <button type="button" data-m="fourball">Fourball</button>
           </div>
         </div>
       </div>
@@ -194,6 +197,41 @@ function openRoundConfig(course) {
           <span class="v"><input id="rcRivalHcp" type="number" inputmode="decimal" step="${tees ? '0.1' : '1'}" min="-10" max="54" placeholder="${tees ? 'Índice' : 'Golpes'}" value="${tees ? (profile.rivalIndex != null ? profile.rivalIndex : '') : (profile.rivalHcp != null ? profile.rivalHcp : '')}"></span>
         </div>
         <div class="rc-note" id="rcAdvNote"></div>
+      </div>
+
+      <div class="rc-sec hidden" id="rcFbSec">Fourball (por parejas)</div>
+      <div class="rc-group hidden" id="rcFbGrp">
+        <div class="rc-modo">
+          <span class="k">Formato</span>
+          <div class="seg rc-seg" id="rcFbFmt">
+            <button type="button" data-f="match" class="on">Match play 2 vs 2</button>
+            <button type="button" data-f="stableford">Mejor bola (Stableford)</button>
+          </div>
+        </div>
+        <div class="rc-row">
+          <span class="k">Compañero</span>
+          <span class="v"><input id="rcMate" type="text" maxlength="18" placeholder="Compañero" value="${esc(profile.mateName || '')}"></span>
+        </div>
+        <div class="rc-row">
+          <span class="k">${tees ? 'Hándicap exacto' : 'Hándicap de juego'}</span>
+          <span class="v"><input id="rcMateHcp" type="number" inputmode="decimal" step="${tees ? '0.1' : '1'}" min="-10" max="54" placeholder="${tees ? 'Índice' : 'Golpes'}" value="${tees ? (profile.mateIndex != null ? profile.mateIndex : '') : (profile.mateHcp != null ? profile.mateHcp : '')}"></span>
+        </div>
+        <div class="rc-row" id="rcFbRivalRow">
+          <span class="k">Pareja rival</span>
+          <span class="v"><input id="rcFbRivals" type="text" maxlength="18" placeholder="Rivales" value="${esc(profile.fbRivals || '')}"></span>
+        </div>
+        <div class="rc-modo" id="rcFbAdvRow">
+          <span class="k">Ventaja</span>
+          <div class="seg rc-seg" id="rcFbAdv">
+            <button type="button" data-a="hcp" class="on">Con hándicap</button>
+            <button type="button" data-a="scratch">Todos a scratch</button>
+          </div>
+        </div>
+        <div class="rc-row" id="rcFbRivalHcpRow">
+          <span class="k">${tees ? 'Hcp exacto rivales' : 'Hcp de juego rivales'}</span>
+          <span class="v"><input id="rcFbRivalHcp" type="number" inputmode="decimal" step="${tees ? '0.1' : '1'}" min="-10" max="54" placeholder="${tees ? 'Índice' : 'Golpes'}" value="${tees ? (profile.fbRivalIndex != null ? profile.fbRivalIndex : '') : (profile.fbRivalHcp != null ? profile.fbRivalHcp : '')}"></span>
+        </div>
+        <div class="rc-note" id="rcFbNote"></div>
       </div>
 
       <div class="rc-sec">Hándicap</div>
@@ -229,8 +267,9 @@ function openRoundConfig(course) {
     </div>`;
   document.body.appendChild(bg);
 
-  let mode = 'stableford', adv = 'hcp';
+  let mode = 'stableford', adv = 'hcp', fbFmt = 'match', fbAdv = 'hcp';
   const modeBox = $('#rcMode'), advBox = $('#rcAdv');
+  const fbFmtBox = $('#rcFbFmt'), fbAdvBox = $('#rcFbAdv');
   const holesSel = $('#rcHoles');
   const curTee = () => tees ? (tees[+$('#rcTee').value] || tees[0]) : null;
   const nine = () => holesSel.value !== '18';
@@ -245,19 +284,40 @@ function openRoundConfig(course) {
   const myPH = () => { const v = numVal('#rcHcp'); return v == null ? null : Math.round(v); };
   // Hándicap de juego del rival: si el campo tiene slope se introduce su índice y se convierte al 100%.
   const rivalPH = () => { const v = numVal('#rcRivalHcp'); return v == null ? null : (tees ? playingHcp(v, 1) : Math.round(v)); };
+  // Asignación de hándicap de la modalidad (RFEG/WHS): individual 95%, match play 100%,
+  // fourball match play 90% de la diferencia (el hándicap se mete al 100% y se resta después)
+  // y fourball mejor bola (stableford) 85% del hándicap de cada uno.
+  const allowance = () => mode === 'stableford' || mode === 'medal' ? HCP_ALLOWANCE
+    : mode === 'fourball' && fbFmt === 'stableford' ? FB_STB_ALLOWANCE : 1;
+  // Hándicap de juego del compañero / de la pareja rival, con la misma asignación que el mío.
+  const otherPH = sel => { const v = numVal(sel); return v == null ? null : (tees ? playingHcp(v, allowance()) : Math.round(v)); };
+  const matePH = () => otherPH('#rcMateHcp');
+  const fbRivalPH = () => otherPH('#rcFbRivalHcp');
 
   modeBox.querySelectorAll('button').forEach(b => b.onclick = () => {
     mode = b.dataset.m;
     modeBox.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
-    const m = mode === 'match';
+    const m = mode === 'match', f = mode === 'fourball';
     $('#rcRivalSec').classList.toggle('hidden', !m);
     $('#rcRivalGrp').classList.toggle('hidden', !m);
-    recalc(); // el match play individual se juega al 100% del hándicap, no al 95%
+    $('#rcFbSec').classList.toggle('hidden', !f);
+    $('#rcFbGrp').classList.toggle('hidden', !f);
+    recalc(); // cada modalidad tiene su propia asignación de hándicap
   });
   advBox.querySelectorAll('button').forEach(b => b.onclick = () => {
     adv = b.dataset.a;
     advBox.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
     recalcAdv();
+  });
+  fbFmtBox.querySelectorAll('button').forEach(b => b.onclick = () => {
+    fbFmt = b.dataset.f;
+    fbFmtBox.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    recalc(); // cambia la asignación (90% de la diferencia ↔ 85%)
+  });
+  fbAdvBox.querySelectorAll('button').forEach(b => b.onclick = () => {
+    fbAdv = b.dataset.a;
+    fbAdvBox.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    recalcFb();
   });
 
   // Recalcula el hándicap de juego al cambiar índice, barra, nº de hoyos o modalidad.
@@ -266,13 +326,54 @@ function openRoundConfig(course) {
       const box = $('#rcCalc'), index = numVal('#rcIndex');
       if (index == null) { $('#rcHcp').value = ''; box.textContent = 'Introduce tu índice para calcular los golpes.'; }
       else {
-        const allow = mode === 'match' ? 1 : HCP_ALLOWANCE; // RFEG/WHS: match play individual al 100%
+        const allow = allowance(); // RFEG/WHS: match play al 100%, fourball mejor bola al 85%
         const t = curTee(), sr = t[1], cr = t[2], phR = playingHcp(index, allow);
         $('#rcHcp').value = phR;
         box.innerHTML = `redondear( ${Math.round(allow * 100)}% × [ ${fmtHcp(index)} × ${sr}/113 + (${fmtHcp(cr)} − ${par}) ]${nine() ? ' ÷ 2' : ''} ) = <b>${phR} golpes</b>`;
       }
     }
     recalcAdv();
+    recalcFb();
+  }
+  // Golpes de ventaja de cada uno en fourball. null si falta algún hándicap.
+  function fbShares() {
+    const mine = myPH(), mate = matePH();
+    if (mine == null || mate == null) return null;
+    if (fbFmt === 'stableford') return { me: Math.max(0, mine), partner: Math.max(0, mate), rivals: 0 };
+    if (fbAdv === 'scratch') return { me: 0, partner: 0, rivals: 0, scratch: true };
+    const rv = fbRivalPH();
+    if (rv == null) return null;
+    const low = Math.min(mine, mate, rv);
+    const g = v => Math.round(FB_MATCH_ALLOWANCE * (v - low));
+    return { me: g(mine), partner: g(mate), rivals: g(rv), low };
+  }
+  // Nota del fourball: quién recibe cuántos golpes y cómo se decide cada hoyo.
+  function recalcFb() {
+    if (mode !== 'fourball') return;
+    const stb = fbFmt === 'stableford';
+    $('#rcFbRivalRow').classList.toggle('hidden', stb);
+    $('#rcFbAdvRow').classList.toggle('hidden', stb);
+    $('#rcFbRivalHcpRow').classList.toggle('hidden', stb || fbAdv === 'scratch');
+    const note = $('#rcFbNote');
+    const mate = esc($('#rcMate').value.trim() || 'tu compañero');
+    const sh = fbShares();
+    if (!sh) {
+      note.textContent = stb
+        ? 'Pon tu hándicap y el de tu compañero: cada uno juega su bola con el 85% de sus golpes.'
+        : 'Pon los hándicaps: los golpes se reparten al 90% de la diferencia con el más bajo de los cuatro.';
+      return;
+    }
+    const g = (n, who) => `${who} <b>${n} golpe${n === 1 ? '' : 's'}</b>`;
+    if (stb) {
+      note.innerHTML = `Cada uno juega su bola al 85%: ${g(sh.me, 'tú')} y ${g(sh.partner, mate)}. `
+        + 'En cada hoyo cuentan los puntos del mejor de los dos.';
+    } else if (sh.scratch) {
+      note.textContent = 'Los cuatro a golpes brutos: cada hoyo lo gana la pareja que meta la mejor bola.';
+    } else {
+      const rv = esc($('#rcFbRivals').value.trim() || 'los rivales');
+      note.innerHTML = `Al 90% de la diferencia con el hándicap más bajo: ${g(sh.me, 'tú')}, ${g(sh.partner, mate)} y ${g(sh.rivals, rv)}, `
+        + 'en los hoyos de índice más bajo. Cada hoyo enfrenta vuestra mejor bola contra la suya.';
+    }
   }
   // Nota de la ventaja del partido: quién da golpes a quién (o si se juega a scratch).
   function recalcAdv() {
@@ -296,9 +397,13 @@ function openRoundConfig(course) {
     $('#rcTee').onchange = recalc;
     holesSel.onchange = recalc;
   }
-  $('#rcHcp').oninput = recalcAdv;
+  $('#rcHcp').oninput = () => { recalcAdv(); recalcFb(); };
   $('#rcRivalHcp').oninput = recalcAdv;
   $('#rcRival').oninput = recalcAdv;
+  $('#rcMate').oninput = recalcFb;
+  $('#rcMateHcp').oninput = recalcFb;
+  $('#rcFbRivals').oninput = recalcFb;
+  $('#rcFbRivalHcp').oninput = recalcFb;
   recalc();
 
   const close = () => bg.remove();
@@ -329,9 +434,34 @@ function openRoundConfig(course) {
       profile.rivalName = rival;
       if (!scratch) { if (tees) profile.rivalIndex = numVal('#rcRivalHcp'); else profile.rivalHcp = his; }
     }
-    save(LS.profile, profile); // recuerda índice/barra (o golpes) y el rival para la próxima
+    // Fourball: compañero, formato y reparto de golpes de los cuatro.
+    let fb = null;
+    if (mode === 'fourball') {
+      const sh = fbShares();
+      if (!sh) {
+        toast(myPH() == null ? 'Pon tu hándicap de juego'
+          : matePH() == null ? 'Pon el hándicap de tu compañero'
+          : 'Pon el hándicap de la pareja rival o jugad a scratch');
+        return;
+      }
+      const partner = $('#rcMate').value.trim() || 'Compañero';
+      fb = { format: fbFmt, partner, partnerHcp: matePH(),
+        recvMe: sh.me, recvPartner: sh.partner, recvRivals: sh.rivals,
+        holes: [] }; // las tarjetas se dimensionan en startRound, ya con el rango de hoyos
+      if (fbFmt === 'match') {
+        fb.rivals = $('#rcFbRivals').value.trim() || 'Rivales';
+        fb.rivalScratch = fbAdv === 'scratch';
+        fb.rivalHcp = fb.rivalScratch ? null : fbRivalPH();
+        fb.rivalHoles = [];
+        profile.fbRivals = fb.rivals;
+        if (!fb.rivalScratch) { if (tees) profile.fbRivalIndex = numVal('#rcFbRivalHcp'); else profile.fbRivalHcp = fb.rivalHcp; }
+      }
+      profile.mateName = partner;
+      if (tees) profile.mateIndex = numVal('#rcMateHcp'); else profile.mateHcp = matePH();
+    }
+    save(LS.profile, profile); // recuerda índice/barra (o golpes), el rival y la pareja para la próxima
     close();
-    startRound(course, { range: holesSel.value, mode, hcp, index, barra, match });
+    startRound(course, { range: holesSel.value, mode, hcp, index, barra, match, fb });
   };
 }
 

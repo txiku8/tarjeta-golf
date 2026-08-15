@@ -592,6 +592,10 @@
 
   /* ===== Match play: rival en el editor + filas de rival/estado en la tarjeta ===== */
   .rc-seg3 button { font-size: 13.5px; padding: 13px 3px; }
+  .rc-seg4 button { font-size: 12px; padding: 13px 2px; letter-spacing: -.01em; }
+  /* fourball: la bola de la pareja que NO cuenta en el hoyo se ve atenuada */
+  .sc td.go button.dim { opacity: .42; }
+  .hole-editor .mp-row2 { margin-top: 8px; }
   .sc .mrow td { padding: 3px 0; font-weight: 800; font-size: 12px; }
   .sc .mrow .rh { color: var(--indigo-deep); }
   .sc td.go button.conc { color: var(--muted); font-size: 13px; }
@@ -641,9 +645,9 @@
   #viewRound .hole-editor .calle { margin-top: 8px; }
   #viewRound .hole-editor .calle .segc button { padding: 9px 4px; }
   #viewRound .hole-editor .ed-nav { margin-top: auto; padding: 10px 0 2px; }
-  /* con el bloque del rival el editor puede no caber: se deja desplazar */
-  #viewRound.match .hole-editor { overflow-y: auto; overscroll-behavior: contain; }
-  #viewRound.match .hole-editor .mp-block { margin-top: 8px; padding: 6px; }
+  /* con el bloque del rival / de la pareja el editor puede no caber: se deja desplazar */
+  #viewRound.match .hole-editor, #viewRound.fourball .hole-editor { overflow-y: auto; overscroll-behavior: contain; }
+  #viewRound.match .hole-editor .mp-block, #viewRound.fourball .hole-editor .mp-block { margin-top: 8px; padding: 6px; }
   .hole-editor .ed-nav button.save { background: var(--good); }
 
   /* Pantallas bajas: compacta aún más para que no se recorte nada */

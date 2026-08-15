@@ -59,6 +59,12 @@ function startRound(course, opts) {
     // Match play: bloque del rival con su propia tarjeta de golpes por hoyo.
     match: (opts.mode === 'match' && opts.match)
       ? Object.assign({}, opts.match, { holes: blankMatchHoles(pars.length) }) : null,
+    // Fourball: tarjeta del compañero y, en match play, la mejor bola de la pareja rival.
+    fb: (opts.mode === 'fourball' && opts.fb)
+      ? Object.assign({}, opts.fb, {
+          holes: blankFbHoles(pars.length),
+          rivalHoles: opts.fb.format === 'match' ? blankMatchHoles(pars.length) : null,
+        }) : null,
     hcp: opts.hcp != null ? opts.hcp : null,   // hándicap de juego (golpes) ya calculado/editado
     hcpIndex: opts.index != null ? opts.index : null, // índice exacto (informativo)
     barra: opts.barra || null,                 // barra jugada (informativo)
@@ -79,9 +85,10 @@ function openRound() {
   $('#viewRound').classList.remove('hidden');
   $('#roundBar').classList.remove('hidden');
   $('#rTitle').textContent = active.courseName;
-  const mp = isMatch(active);
-  $('#viewRound').classList.toggle('match', mp);
-  const hcpLbl = mp ? matchSubLabel(active)
+  $('#viewRound').classList.toggle('match', isMatch(active));
+  $('#viewRound').classList.toggle('fourball', isFourball(active));
+  const hcpLbl = isMatch(active) ? matchSubLabel(active)
+    : isFourball(active) ? fbSubLabel(active)
     : (active.hcp != null ? ' · ' + active.hcp + ' golpes' + (active.barra ? ' (' + active.barra + ')' : '') : '');
   $('#rSub').textContent = (active.courseLoc ? active.courseLoc + ' · ' : '') + fmtDate(active.date) +
     ' · ' + active.pars.length + ' hoyos · ' + modeName(active) + hcpLbl;
@@ -105,8 +112,8 @@ function closeRound(toTab) {
 /* Panel desplegable (bottom sheet) con todos los hoyos para saltar entre ellos. */
 function renderSheetHoles() {
   const recv = golfStrokesReceived(active);
-  const stb = active.mode === 'stableford';
-  const st = isMatch(active) ? matchState(active) : null;
+  const stb = active.mode === 'stableford' || fbIsStb(active);
+  const st = anyMatchState(active);
   const box = $('#rsHoles');
   box.innerHTML = active.holes.map((h, i) => {
     const played = !!h.strokes;
@@ -141,11 +148,18 @@ let selHole = 0;                 // índice del hoyo activo en el editor
 // Hoyos cuyo resultado YA se muestra en la tarjeta/totales de arriba. Un hoyo se "revela" al salir
 // de él (pasar a otro); el que se está editando no aparece arriba hasta entonces.
 let shownHoles = new Set();
-// Un hoyo tiene datos si hay golpes míos o, en match play, golpes del rival / hoyo concedido.
+// Un hoyo tiene datos si hay golpes míos, del rival / del compañero, o si está concedido.
 function holeHasData(i) {
   if (active.holes[i].strokes > 0) return true;
   const m = active.match, mh = m && m.holes[i];
-  return !!(mh && (mh.strokes > 0 || mh.conc));
+  if (mh && (mh.strokes > 0 || mh.conc)) return true;
+  const f = active.fb;
+  if (f) {
+    if (f.holes[i] && f.holes[i].strokes > 0) return true;
+    const rh = f.rivalHoles && f.rivalHoles[i];
+    if (rh && (rh.strokes > 0 || rh.conc)) return true;
+  }
+  return false;
 }
 function isHoleShown(i) { return holeHasData(i) && (i !== selHole || shownHoles.has(i)); }
 // Copia de la ronda con SOLO los hoyos ya revelados (el que se edita no cuenta arriba todavía).
@@ -154,15 +168,34 @@ function shownRound() {
   const r = Object.assign({}, active, { holes: active.holes.map((h, i) => isHoleShown(i) ? h : blank) });
   if (active.match) r.match = Object.assign({}, active.match,
     { holes: active.match.holes.map((mh, i) => isHoleShown(i) ? mh : { strokes: 0, conc: null }) });
+  if (active.fb) {
+    r.fb = Object.assign({}, active.fb,
+      { holes: active.fb.holes.map((fh, i) => isHoleShown(i) ? fh : { strokes: 0 }) });
+    if (active.fb.rivalHoles) r.fb.rivalHoles =
+      active.fb.rivalHoles.map((rh, i) => isHoleShown(i) ? rh : { strokes: 0, conc: null });
+  }
   return r;
 }
-function modeName(r) { return r.mode === 'stableford' ? 'Stableford' : r.mode === 'match' ? 'Match play' : 'Medal play'; }
+function modeName(r) {
+  if (r.mode === 'fourball') return fbIsStb(r) ? 'Fourball mejor bola' : 'Fourball match';
+  return r.mode === 'stableford' ? 'Stableford' : r.mode === 'match' ? 'Match play' : 'Medal play';
+}
+// Nombre corto para las filas de la tarjeta (primer nombre, recortado).
+function shortName(s, n) { return esc(String(s || '').split(' ')[0].slice(0, n || 7)); }
+// Nombre del equipo contrario, sea match play individual o fourball.
+function oppName(r) { return isMatch(r) ? r.match.rival : r.fb.rivals; }
 // " vs Rival · a scratch / recibes 3 / das 2"
 function matchSubLabel(r) {
   const m = r.match; if (!m) return '';
   const g = Math.round(m.give || 0);
   const v = m.scratch ? 'a scratch' : g === 0 ? 'sin ventaja' : g > 0 ? 'recibes ' + g : 'das ' + (-g);
   return ' vs ' + m.rival + ' · ' + v;
+}
+// " con Ana vs Los Pérez · recibes 3"
+function fbSubLabel(r) {
+  const f = r.fb; if (!f) return '';
+  const mine = f.recvMe > 0 ? ' · recibes ' + f.recvMe : (f.format === 'match' && f.rivalScratch ? ' · a scratch' : '');
+  return ' con ' + f.partner + (f.format === 'match' ? ' vs ' + f.rivals : '') + mine;
 }
 // Cambia de hoyo revelando el que se abandona y refrescando tarjeta + editor + totales.
 function selectHole(i) {
@@ -197,6 +230,11 @@ function renderRound() { renderScorecard(); renderEditor(); updateTotals(); }
 function renderScorecard() {
   const recv = golfStrokesReceived(active);
   const stb = active.mode === 'stableford';
+  const fbq = isFourball(active), fbStb = fbIsStb(active);
+  // En fourball, qué bola de la pareja cuenta en cada hoyo (la otra se muestra atenuada).
+  const fbFs = fbq ? fbStrokes(active) : null;
+  const fbWho = i => !fbq || !isHoleShown(i) ? null
+    : (fbStb ? fbHolePoints(active, i, fbFs).who : fbBest(active, i, fbFs).who);
   const idxs = active.holes.map((_, i) => i);
   const frontIdx = idxs.filter(i => holeNo(i) <= 9);   // primeros nueve (OUT)
   const backIdx = idxs.filter(i => holeNo(i) >= 10);    // segundos nueve (IN)
@@ -235,16 +273,57 @@ function renderScorecard() {
   const myParRow = stb ? `<tr class="mypar"><td class="rh">Mi par</td>${assemble(
     i => `<td class="tnum">${active.pars[i] + recv[i]}</td>`,
     sumOver(frontIdx, fMyPar), sumOver(backIdx, fMyPar), sumOver(idxs, fMyPar))}</tr>` : '';
-  const goRow = `<tr><td class="rh">${isMatch(active) ? 'Yo' : 'Golpes'}</td>${assemble(
+  const goRow = `<tr><td class="rh">${isMatch(active) || fbq ? 'Yo' : 'Golpes'}</td>${assemble(
     i => { const on = isHoleShown(i) && active.holes[i].strokes > 0;
-      const mh = active.match && active.match.holes[i];
+      // Hoyo que concedemos (yo, o mi pareja en fourball): ✕ en nuestra fila.
+      const mh = active.match ? active.match.holes[i]
+        : fbIsMatch(active) ? active.fb.rivalHoles[i] : null;
       if (!on && mh && mh.conc === 'me' && isHoleShown(i))
         return `<td class="go"><button data-i="${i}" class="conc ${i === selHole ? 'sel' : ''}">✕</button></td>`;
-      return `<td class="go"><button data-i="${i}" class="${on ? 'has' : ''} ${i === selHole ? 'sel' : ''}" style="${on ? `background:${scoreColor(active.holes[i].strokes, active.pars[i])}` : ''}">${on ? active.holes[i].strokes : '·'}</button></td>`; },
+      const dim = on && fbWho(i) === 'partner' ? ' dim' : '';
+      return `<td class="go"><button data-i="${i}" class="${on ? 'has' : ''}${dim} ${i === selHole ? 'sel' : ''}" style="${on ? `background:${scoreColor(active.holes[i].strokes, active.pars[i])}` : ''}">${on ? active.holes[i].strokes : '·'}</button></td>`; },
     dash(sumOver(frontIdx, fStr)), dash(sumOver(backIdx, fStr)), dash(sumOver(idxs, fStr)))}</tr>`;
-  const ptsRow = stb ? `<tr class="pts"><td class="rh">Pts</td>${assemble(
-    i => `<td class="tnum">${isHoleShown(i) ? holePoints(i, recv) : '·'}</td>`,
-    sumOver(frontIdx, fPts), sumOver(backIdx, fPts), sumOver(idxs, fPts))}</tr>` : '';
+  // Puntos: los míos en Stableford individual, los de la pareja (mejor bola) en fourball.
+  const fTeamPts = i => { if (!isHoleShown(i)) return 0; const p = fbHolePoints(active, i, fbFs).team; return p === null ? 0 : p; };
+  const ptsRow = fbStb ? `<tr class="pts"><td class="rh">Pts pareja</td>${assemble(
+      i => { const p = isHoleShown(i) ? fbHolePoints(active, i, fbFs).team : null;
+        return `<td class="tnum">${p === null ? '·' : p}</td>`; },
+      sumOver(frontIdx, fTeamPts), sumOver(backIdx, fTeamPts), sumOver(idxs, fTeamPts))}</tr>`
+    : stb ? `<tr class="pts"><td class="rh">Pts</td>${assemble(
+      i => `<td class="tnum">${isHoleShown(i) ? holePoints(i, recv) : '·'}</td>`,
+      sumOver(frontIdx, fPts), sumOver(backIdx, fPts), sumOver(idxs, fPts))}</tr>` : '';
+
+  // Fila "Match": estado acumulado tras cada hoyo (1↑, AS, 2↓…) y el vigente al cerrar cada nueve.
+  const runRow = st => {
+    const lastRun = arr => { let v = null; arr.forEach(i => { if (st.run[i] !== null) v = st.run[i]; }); return v; };
+    const cellRun = v => v === null ? '–' : `<span style="color:${matchColor(v)}">${matchShort(v)}</span>`;
+    return `<tr class="mrow"><td class="rh">Match</td>${assemble(
+      i => `<td class="tnum">${st.run[i] === null ? '·' : cellRun(st.run[i])}</td>`,
+      cellRun(lastRun(frontIdx)), cellRun(lastRun(backIdx)), cellRun(lastRun(idxs)))}</tr>`;
+  };
+  // Fila de golpes de otro jugador (compañero, rival o mejor bola de la pareja rival).
+  const otherRow = (label, get, concOf, dimWhen) => `<tr><td class="rh">${label}</td>${assemble(
+    i => { const on = isHoleShown(i), s = get(i);
+      if (on && !s && concOf && concOf(i))
+        return `<td class="go"><button data-i="${i}" class="conc ${i === selHole ? 'sel' : ''}">✕</button></td>`;
+      const dim = on && s && dimWhen && dimWhen(i) ? ' dim' : '';
+      return `<td class="go"><button data-i="${i}" class="${on && s ? 'has' : ''}${dim} ${i === selHole ? 'sel' : ''}" style="${on && s ? `background:${scoreColor(s, active.pars[i])}` : ''}">${on && s ? s : '·'}</button></td>`; },
+    dash(sumOver(frontIdx, i => isHoleShown(i) ? get(i) : 0)),
+    dash(sumOver(backIdx, i => isHoleShown(i) ? get(i) : 0)),
+    dash(sumOver(idxs, i => isHoleShown(i) ? get(i) : 0)))}</tr>`;
+
+  // --- Filas del fourball: compañero y, en match play, la mejor bola rival + el estado ---
+  let fbRows = '';
+  if (fbq) {
+    const f = active.fb;
+    fbRows = otherRow(shortName(f.partner), i => f.holes[i].strokes || 0, null, i => fbWho(i) === 'me');
+    if (fbIsMatch(active)) {
+      const st = fbMatchState(shownRound());
+      // En su fila la ✕ es solo cuando NOS conceden el hoyo (el que concedemos va en la nuestra).
+      fbRows += otherRow(shortName(f.rivals), i => f.rivalHoles[i].strokes || 0,
+        i => f.rivalHoles[i].conc === 'rival') + runRow(st);
+    }
+  }
 
   // --- Filas propias del match play: ventaja, tarjeta del rival y estado del partido ---
   let matchRows = '';
@@ -266,18 +345,12 @@ function renderScorecard() {
           return `<td class="go"><button data-i="${i}" class="conc ${i === selHole ? 'sel' : ''}">✕</button></td>`;
         return `<td class="go"><button data-i="${i}" class="${on && mh.strokes ? 'has' : ''} ${i === selHole ? 'sel' : ''}" style="${on && mh.strokes ? `background:${scoreColor(mh.strokes, active.pars[i])}` : ''}">${on && mh.strokes ? mh.strokes : '·'}</button></td>`; },
       dash(sumOver(frontIdx, fRiv)), dash(sumOver(backIdx, fRiv)), dash(sumOver(idxs, fRiv)))}</tr>`;
-    // Estado acumulado tras cada hoyo (1↑, AS, 2↓…) y el vigente al cerrar cada nueve.
-    const lastRun = arr => { let v = null; arr.forEach(i => { if (st.run[i] !== null) v = st.run[i]; }); return v; };
-    const cellRun = v => v === null ? '–' : `<span style="color:${matchColor(v)}">${matchShort(v)}</span>`;
-    const stRow = `<tr class="mrow"><td class="rh">Match</td>${assemble(
-      i => `<td class="tnum">${st.run[i] === null ? '·' : cellRun(st.run[i])}</td>`,
-      cellRun(lastRun(frontIdx)), cellRun(lastRun(backIdx)), cellRun(lastRun(idxs)))}</tr>`;
-    matchRows = ventRow + rivalRow + stRow;
+    matchRows = ventRow + rivalRow + runRow(st);
   }
 
   $('#scGrid').innerHTML = `
     <thead><tr><th class="rh">Hoyo</th>${head}</tr></thead>
-    <tbody>${parRow}${myParRow}${goRow}${matchRows}${ptsRow}</tbody>`;
+    <tbody>${parRow}${myParRow}${goRow}${fbRows}${matchRows}${ptsRow}</tbody>`;
   $('#scGrid').querySelectorAll('[data-i]').forEach(b => b.onclick = () => selectHole(+b.dataset.i));
 }
 
@@ -287,10 +360,17 @@ function scoreRightHtml(i, recv) {
   const chip = h.strokes
     ? `<div class="chip" style="background:${scoreColor(h.strokes, par)}">${scoreLabelTxt(h.strokes - par)}</div>`
     : `<div class="chip" style="background:var(--muted)">Sin apuntar</div>`;
-  if (isMatch(active)) {
-    const res = matchHoleResult(active, i);
-    const txt = res === null ? '' : res > 0 ? 'Ganas el hoyo' : res < 0 ? 'Pierdes el hoyo' : 'Empatado';
+  if (isAnyMatch(active)) {
+    const team = isFourball(active);
+    const res = team ? fbHoleResult(active, i) : matchHoleResult(active, i);
+    const txt = res === null ? '' : res > 0 ? (team ? 'Ganáis el hoyo' : 'Ganas el hoyo')
+      : res < 0 ? (team ? 'Perdéis el hoyo' : 'Pierdes el hoyo') : 'Empatado';
     return chip + (res === null ? '' : `<div class="hpts"><b style="color:${matchColor(res)}">${txt}</b></div>`);
+  }
+  if (fbIsStb(active)) {
+    const p = fbHolePoints(active, i);
+    return chip + (p.team === null ? ''
+      : `<div class="hpts"><b>${p.team} pt${p.team === 1 ? '' : 's'}</b> pareja</div>`);
   }
   if (!h.strokes) return chip;
   const stb = active.mode === 'stableford';
@@ -331,9 +411,11 @@ function renderEditor() {
   const recv = golfStrokesReceived(active);
   const stb = active.mode === 'stableford';
   const mp = isMatch(active);
+  const fbq = isFourball(active);
   const ms = mp ? matchStrokes(active) : null;
-  const r = mp ? ms.me[i] : recv[i];
-  const dots = ((stb || mp) && r > 0) ? `<div class="hdots" title="${r} golpe(s) que da el hándicap aquí">${'•'.repeat(r)}</div>` : '';
+  const fs = fbq ? fbStrokes(active) : null;
+  const r = mp ? ms.me[i] : fbq ? fs.me[i] : recv[i];
+  const dots = ((stb || mp || fbq) && r > 0) ? `<div class="hdots" title="${r} golpe(s) que da el hándicap aquí">${'•'.repeat(r)}</div>` : '';
   const meta2 = (!stb && active.si && active.si[i]) ? `<div class="hcp none">índice ${active.si[i]}</div>` : '';
   const par3 = par <= 3;
   const calleHtml = `
@@ -366,6 +448,28 @@ function renderEditor() {
         </div>
       </div>
     </div>`;
+  // Bloque del fourball: golpes del compañero y, en match play, la mejor bola de la pareja rival.
+  const f = fbq ? active.fb : null;
+  const fh = fbq ? f.holes[i] : null;
+  const frh = fbIsMatch(active) ? f.rivalHoles[i] : null;
+  const fbHtml = !fbq ? '' : `
+    <div class="mp-block">
+      <div class="sub mp-row">
+        <span class="k">${esc(f.partner)}${fs.partner[i] > 0 ? ` <i class="rdots">${'•'.repeat(fs.partner[i])}</i>` : ''}</span>
+        ${miniPickerHtml('matePick', 0, PICK_MAX)}
+      </div>
+      ${!frh ? '' : `
+      <div class="sub mp-row mp-row2">
+        <span class="k">Mejor bola · ${esc(f.rivals)}${fs.rivals[i] > 0 ? ` <i class="rdots">${'•'.repeat(fs.rivals[i])}</i>` : ''}</span>
+        ${miniPickerHtml('fbRivalPick', 0, PICK_MAX)}
+      </div>
+      <div class="calle mp-conc">
+        <div class="segc">
+          <button data-fbconc="rival" class="win ${frh.conc === 'rival' ? 'on' : ''}">Nos lo conceden</button>
+          <button data-fbconc="me" class="lose ${frh.conc === 'me' ? 'on' : ''}">Se lo concedemos</button>
+        </div>
+      </div>`}
+    </div>`;
   const nums = [];
   for (let x = PICK_MIN; x <= PICK_MAX; x++) nums.push(`<div class="num tnum" data-x="${x}">${x}</div>`);
   $('#holeEditor').innerHTML = `
@@ -384,6 +488,7 @@ function renderEditor() {
       <div class="sub"><span class="k">Penal.</span>${miniPickerHtml('penalPick', 0, 5)}</div>
     </div>
     ${mpHtml}
+    ${fbHtml}
     ${calleHtml}
     <div class="ed-nav"></div>`;
 
@@ -441,6 +546,28 @@ function renderEditor() {
       paintConc(); refreshMatch();
     });
   }
+  if (fbq) {
+    // Igual que en el match play: se refresca lo que depende de la pareja sin rehacer el editor.
+    const refreshFb = () => {
+      const right = $('#holeEditor').querySelector('.ed-score');
+      if (right) right.innerHTML = scoreRightHtml(i, recv);
+      updateNav(); renderScorecard(); updateTotals(); markDirty(); checkMatchClose();
+    };
+    wireMiniPicker('matePick', 0, PICK_MAX, fh.strokes || 0, v => { fh.strokes = v; refreshFb(); });
+    if (frh) {
+      const concBtns = ed.querySelectorAll('[data-fbconc]');
+      const paintConc = () => concBtns.forEach(b => b.classList.toggle('on', b.dataset.fbconc === frh.conc));
+      wireMiniPicker('fbRivalPick', 0, PICK_MAX, frh.strokes || 0, v => {
+        frh.strokes = v;
+        if (v > 0 && frh.conc) { frh.conc = null; paintConc(); } // apuntar su bola anula la concesión
+        refreshFb();
+      });
+      concBtns.forEach(b => b.onclick = () => {
+        frh.conc = frh.conc === b.dataset.fbconc ? null : b.dataset.fbconc;
+        paintConc(); refreshFb();
+      });
+    }
+  }
   const gp = ed.querySelector('#btnGps');
   if (gp) gp.onclick = openGps;
   updateNav();
@@ -450,8 +577,9 @@ function renderEditor() {
 function updateNav() {
   const nav = $('#holeEditor .ed-nav'); if (!nav) return;
   const i = selHole, last = active.holes.length - 1;
-  // En match play el partido puede acabarse antes del 18: al cerrarse, el botón pasa a guardar.
-  const st = isMatch(active) ? matchState(active) : null;
+  // En match play (individual o fourball) el partido puede acabarse antes del 18:
+  // al cerrarse, el botón pasa a guardar.
+  const st = anyMatchState(active);
   const closedHere = !!(st && st.closed && i >= st.closedAt);
   const allDone = active.holes.every((x, k) => holeHasData(k)) || closedHere;
   nav.innerHTML = `
@@ -513,30 +641,43 @@ function setScore(x) {
 function markDirty() { active.dirty = true; save(LS.active, active); }
 // Avisa una sola vez cuando la ventaja supera a los hoyos que quedan (el clásico "3&2").
 function checkMatchClose() {
-  if (!isMatch(active)) return;
-  const st = matchState(active);
-  if (st.closed && !active.match.done) { active.match.done = true; toast('Partido cerrado · ' + matchVerdict(st)); save(LS.active, active); }
-  else if (!st.closed && active.match.done) { active.match.done = false; save(LS.active, active); }
+  if (!isAnyMatch(active)) return;
+  const st = anyMatchState(active);
+  const blk = isMatch(active) ? active.match : active.fb;
+  if (st.closed && !blk.done) { blk.done = true; toast('Partido cerrado · ' + matchVerdict(st, isFourball(active))); save(LS.active, active); }
+  else if (!st.closed && blk.done) { blk.done = false; save(LS.active, active); }
 }
 
 // Totales de arriba. En Stableford el hero es Puntos; en Medal, los Golpes totales.
 // Junto al hero: Vs Par personal (con los golpes del hándicap) y Vs Par del campo.
 function updateTotals() {
   if (!active) return;
-  // Match play: el hero es el estado del partido (2↑ / Iguales / 3&2 al cerrarse).
-  if (isMatch(active)) {
-    const st = matchState(shownRound());
+  // Match play (individual o fourball): el hero es el estado del partido (2↑ / Iguales / 3&2).
+  if (isAnyMatch(active)) {
+    const sr = shownRound(), team = isFourball(active);
+    const st = anyMatchState(sr);
     let mine = 0, his = 0;
-    active.holes.forEach((h, i) => {
+    if (team) { const bt = fbBallTotals(sr); mine = bt.mine; his = bt.rivals; }
+    else active.holes.forEach((h, i) => {
       if (!isHoleShown(i)) return;
       mine += h.strokes; his += active.match.holes[i].strokes || 0;
     });
     const val = st.closed ? matchFinalText(st) : (st.up === 0 ? 'Iguales' : matchShort(st.up));
     const bg = st.up > 0 ? 'var(--good)' : st.up < 0 ? 'var(--bad)' : '';
     $('#totstrip').innerHTML = [
-      `<div class="ts-cell hero"${bg ? ` style="background:${bg}"` : ''}><div class="tk">Partido<small>${esc(active.match.rival)}</small></div><div class="tv tnum">${val}</div></div>`,
-      `<div class="ts-cell"><div class="tk">Golpes<small>yo · rival</small></div><div class="tv tnum">${mine}–${his}</div></div>`,
+      `<div class="ts-cell hero"${bg ? ` style="background:${bg}"` : ''}><div class="tk">Partido<small>${esc(oppName(active))}</small></div><div class="tv tnum">${val}</div></div>`,
+      `<div class="ts-cell"><div class="tk">${team ? 'Mejor bola' : 'Golpes'}<small>${team ? 'nosotros · ellos' : 'yo · rival'}</small></div><div class="tv tnum">${mine}–${his}</div></div>`,
       `<div class="ts-cell"><div class="tk">Quedan<small>${st.dormie ? 'dormie' : 'hoyos'}</small></div><div class="tv tnum">${st.remaining}</div></div>`,
+    ].join('');
+    return;
+  }
+  // Fourball mejor bola: el hero son los puntos de la pareja.
+  if (fbIsStb(active)) {
+    const ft = fbTotals(shownRound());
+    $('#totstrip').innerHTML = [
+      `<div class="ts-cell hero"><div class="tk">Puntos<small>pareja</small></div><div class="tv tnum">${ft.team}</div></div>`,
+      `<div class="ts-cell"><div class="tk">Míos<small>${ft.mineCount} hoyos cuentan</small></div><div class="tv tnum">${ft.me}</div></div>`,
+      `<div class="ts-cell"><div class="tk">${shortName(active.fb.partner, 9)}<small>puntos</small></div><div class="tv tnum">${ft.partner}</div></div>`,
     ].join('');
     return;
   }
@@ -562,9 +703,9 @@ function fmtHcp(h) { return Number.isInteger(h) ? String(h) : String(h).replace(
 
 function saveRound() {
   const t = roundTotals(active);
-  // En match play vale con que haya hoyos decididos (puede haberlos concedidos, sin golpes).
-  const anyMatch = isMatch(active) && active.holes.some((h, i) => holeHasData(i));
-  if (!t.played && !anyMatch) { toast('Apunta al menos un hoyo'); return; }
+  // En match play y fourball vale con que haya hoyos con datos (concedidos o del compañero).
+  const anyTeam = (isAnyMatch(active) || isFourball(active)) && active.holes.some((h, i) => holeHasData(i));
+  if (!t.played && !anyTeam) { toast('Apunta al menos un hoyo'); return; }
   const rec = JSON.parse(JSON.stringify(active));
   delete rec.dirty; rec.saved = true;
   const idx = rounds.findIndex(r => r.id === rec.id);
@@ -632,8 +773,10 @@ function renderSummary(r, fromHistory) {
   const out = sub(frontIdx), inn = sub(backIdx);
 
   const modeLbl = modeName(r);
-  const mst = isMatch(r) ? matchState(r) : null;
-  const hcpLbl = mst ? matchSubLabel(r) : (hasHcp ? ' · hcp ' + fmtHcp(r.hcp) : '');
+  const mst = anyMatchState(r);
+  const team = isFourball(r);
+  const hcpLbl = isMatch(r) ? matchSubLabel(r) : team ? fbSubLabel(r)
+    : (hasHcp ? ' · hcp ' + fmtHcp(r.hcp) : '');
 
   const mut = 'var(--muted)';
   const vsChip = (lbl, v) =>
@@ -648,17 +791,19 @@ function renderSummary(r, fromHistory) {
   if (mst) {
     const fin = mst.closed ? mst.closedUp : mst.up;
     const bg = fin > 0 ? 'var(--good)' : fin < 0 ? 'var(--bad)' : '';
-    const rivStrokes = r.match.holes.reduce((a, mh) => a + (mh.strokes || 0), 0);
+    const bt = team ? fbBallTotals(r) : null;
+    const myStrokes = team ? bt.mine : t.strokes;
+    const rivStrokes = team ? bt.rivals : r.match.holes.reduce((a, mh) => a + (mh.strokes || 0), 0);
     const cnt = x => mst.res.filter(v => v === x).length;
     heroHtml = `
     <div class="sum-hero"${bg ? ` style="background:${bg}"` : ''}>
       <div class="sh-main">
         <div class="k">Partido</div>
         <div class="v tnum">${matchFinalText(mst)}</div>
-        <div class="s">vs ${esc(r.match.rival)}</div>
+        <div class="s">${team ? 'con ' + esc(r.fb.partner) + ' vs ' : 'vs '}${esc(oppName(r))}</div>
       </div>
       <div class="sh-vs">
-        <div class="svs"><span class="k">Resultado</span><span class="v vtxt">${matchOutcomeWord(mst)}</span></div>
+        <div class="svs"><span class="k">Resultado</span><span class="v vtxt">${matchOutcomeWord(mst, team)}</span></div>
         ${vsChip('Vs par campo', t.vsPar)}
       </div>
     </div>`;
@@ -667,8 +812,33 @@ function renderSummary(r, fromHistory) {
     <div class="mgrid2">
       ${mtile('Hoyos ganados', cnt(1), 'de ' + mst.decided + ' jugados', 'flag', 'var(--good)')}
       ${mtile('Empatados', cnt(0), 'halved', 'ring', mut)}
-      ${mtile('Perdidos', cnt(-1), r.match.rival, 'warn', 'var(--bad)')}
-      ${mtile('Golpes', t.strokes + '–' + rivStrokes, 'yo · ' + esc(r.match.rival), 'chart', 'var(--info)', mut)}
+      ${mtile('Perdidos', cnt(-1), oppName(r), 'warn', 'var(--bad)')}
+      ${mtile(team ? 'Mejor bola' : 'Golpes', myStrokes + '–' + rivStrokes,
+        (team ? 'nosotros · ' : 'yo · ') + esc(oppName(r)), 'chart', 'var(--info)', mut)}
+    </div>`;
+  } else if (fbIsStb(r)) {
+    // Fourball mejor bola: el resultado es el total de puntos de la pareja.
+    const ft = fbTotals(r);
+    const mate = esc(r.fb.partner);
+    heroHtml = `
+    <div class="sum-hero">
+      <div class="sh-main">
+        <div class="k">Puntos pareja</div>
+        <div class="v tnum">${ft.team}</div>
+        <div class="s">con ${mate}</div>
+      </div>
+      <div class="sh-vs">
+        ${vsChip('Vs par campo', t.vsPar)}
+        ${hasHcp ? vsChip('Vs par (hcp)', vsYo) : ''}
+      </div>
+    </div>`;
+    matchSec = `
+    <div class="sum-sec">Pareja</div>
+    <div class="mgrid2">
+      ${mtile('Puntos pareja', ft.team, 'mejor bola', 'flag', 'var(--good)')}
+      ${mtile('Mis puntos', ft.me, t.strokes + ' golpes', 'chart', 'var(--indigo)')}
+      ${mtile('Puntos ' + shortName(r.fb.partner, 9), ft.partner, mate, 'ball', 'var(--info)', mut)}
+      ${mtile('Hoyos que aporto', ft.mineCount, 'de ' + t.played + ' jugados', 'target', ft.mineCount ? 'var(--indigo)' : mut)}
     </div>`;
   } else {
     heroHtml = `
@@ -809,42 +979,62 @@ function renderRoundCard(r) {
     i => `<td class="tnum">${r.pars[i]}</td>`,
     sumOver(frontIdx, i => r.pars[i]), sumOver(backIdx, i => r.pars[i]), sumOver(idxs, i => r.pars[i]))}</tr>`;
 
-  const mst = isMatch(r) ? matchState(r) : null;
-  const conc = i => mst && r.match.holes[i].conc;
-  const goRow = `<tr class="tk-go"><td class="tk-rh">${mst ? 'Yo' : 'Golpes'}</td>${assemble(
+  const mst = anyMatchState(r);
+  const team = isFourball(r);
+  const fbFs = team ? fbStrokes(r) : null;
+  const conc = i => isMatch(r) ? r.match.holes[i].conc
+    : (team && r.fb.rivalHoles) ? r.fb.rivalHoles[i].conc : null;
+  const goRow = `<tr class="tk-go"><td class="tk-rh">${mst || team ? 'Yo' : 'Golpes'}</td>${assemble(
     i => played(i)
       ? `<td><span class="tk-ball" style="background:${scoreColor(r.holes[i].strokes, r.pars[i])}">${r.holes[i].strokes}</span></td>`
       : `<td><span class="tk-ball empty">${conc(i) === 'me' ? '✕' : '·'}</span></td>`,
     dash(sumOver(frontIdx, i => r.holes[i].strokes || 0)), dash(sumOver(backIdx, i => r.holes[i].strokes || 0)), dash(t.strokes))}</tr>`;
 
-  // Filas del rival y del estado del partido (solo en match play).
-  let mRows = '';
-  if (mst) {
-    const m = r.match, rv = i => m.holes[i].strokes || 0;
-    const rvName = esc(m.rival.split(' ')[0].slice(0, 8));
-    const lastRun = arr => { let v = null; arr.forEach(i => { if (mst.run[i] !== null) v = mst.run[i]; }); return v; };
+  // Fila de golpes de otro jugador (rival, compañero o mejor bola de la pareja rival).
+  const tkRow = (label, get, concKey) => `<tr class="tk-go"><td class="tk-rh">${label}</td>${assemble(
+    i => get(i)
+      ? `<td><span class="tk-ball" style="background:${scoreColor(get(i), r.pars[i])}">${get(i)}</span></td>`
+      : `<td><span class="tk-ball empty">${concKey && conc(i) === concKey ? '✕' : '·'}</span></td>`,
+    dash(sumOver(frontIdx, get)), dash(sumOver(backIdx, get)), dash(sumOver(idxs, get)))}</tr>`;
+  // Fila del estado del partido hoyo a hoyo.
+  const tkRunRow = st => {
+    const lastRun = arr => { let v = null; arr.forEach(i => { if (st.run[i] !== null) v = st.run[i]; }); return v; };
     const cellRun = v => v === null ? '–' : `<span style="color:${matchColor(v)}">${matchShort(v)}</span>`;
-    mRows = `<tr class="tk-go"><td class="tk-rh">${rvName}</td>${assemble(
-      i => rv(i)
-        ? `<td><span class="tk-ball" style="background:${scoreColor(rv(i), r.pars[i])}">${rv(i)}</span></td>`
-        : `<td><span class="tk-ball empty">${conc(i) === 'rival' ? '✕' : '·'}</span></td>`,
-      dash(sumOver(frontIdx, rv)), dash(sumOver(backIdx, rv)), dash(sumOver(idxs, rv)))}</tr>`
-      + `<tr class="tk-min"><td class="tk-rh">Match</td>${assemble(
-        i => `<td class="tnum">${mst.run[i] === null ? '·' : cellRun(mst.run[i])}</td>`,
-        cellRun(lastRun(frontIdx)), cellRun(lastRun(backIdx)), cellRun(lastRun(idxs)))}</tr>`;
+    return `<tr class="tk-min"><td class="tk-rh">Match</td>${assemble(
+      i => `<td class="tnum">${st.run[i] === null ? '·' : cellRun(st.run[i])}</td>`,
+      cellRun(lastRun(frontIdx)), cellRun(lastRun(backIdx)), cellRun(lastRun(idxs)))}</tr>`;
+  };
+
+  // Filas del rival / de la pareja y del estado del partido.
+  let mRows = '';
+  if (team) {
+    const f = r.fb;
+    mRows = tkRow(shortName(f.partner, 8), i => f.holes[i].strokes || 0);
+    if (fbIsMatch(r)) mRows += tkRow(shortName(f.rivals, 8), i => f.rivalHoles[i].strokes || 0, 'rival') + tkRunRow(mst);
+  } else if (mst) {
+    mRows = tkRow(shortName(r.match.rival, 8), i => r.match.holes[i].strokes || 0, 'rival') + tkRunRow(mst);
   }
 
   const puttRow = `<tr class="tk-min"><td class="tk-rh">Putts</td>${assemble(
     i => `<td class="tnum">${played(i) ? r.holes[i].putts : '·'}</td>`,
     sumOver(frontIdx, i => r.holes[i].putts || 0), sumOver(backIdx, i => r.holes[i].putts || 0), t.putts)}</tr>`;
 
-  const ptsRow = stb ? `<tr class="tk-min tk-ptsrow"><td class="tk-rh">Pts</td>${assemble(
-    i => `<td class="tnum">${played(i) ? pts(i) : '·'}</td>`,
-    sumOver(frontIdx, pts), sumOver(backIdx, pts), t.stb)}</tr>` : '';
+  // Puntos: los míos en Stableford individual, los de la pareja en fourball mejor bola.
+  const teamPts = i => { const p = fbHolePoints(r, i, fbFs).team; return p === null ? 0 : p; };
+  const ft = fbIsStb(r) ? fbTotals(r) : null;
+  const ptsRow = ft ? `<tr class="tk-min tk-ptsrow"><td class="tk-rh">Pts pareja</td>${assemble(
+      i => { const p = fbHolePoints(r, i, fbFs).team; return `<td class="tnum">${p === null ? '·' : p}</td>`; },
+      sumOver(frontIdx, teamPts), sumOver(backIdx, teamPts), ft.team)}</tr>`
+    : stb ? `<tr class="tk-min tk-ptsrow"><td class="tk-rh">Pts</td>${assemble(
+      i => `<td class="tnum">${played(i) ? pts(i) : '·'}</td>`,
+      sumOver(frontIdx, pts), sumOver(backIdx, pts), t.stb)}</tr>` : '';
 
-  const modeLbl = modeName(r) + (mst ? ' vs ' + esc(r.match.rival) : '');
-  const resultVal = mst ? matchFinalText(mst) : stb ? t.stb : t.strokes;
-  const resultSub = mst ? matchOutcomeWord(mst) + ' · ' + t.strokes + ' golpes' : stb ? t.strokes + ' golpes' : t.stb + ' pts';
+  const modeLbl = modeName(r) + (team ? ' con ' + esc(r.fb.partner) : '')
+    + (mst ? ' vs ' + esc(oppName(r)) : '');
+  const resultVal = mst ? matchFinalText(mst) : ft ? ft.team : stb ? t.stb : t.strokes;
+  const resultSub = mst ? matchOutcomeWord(mst, team) + ' · ' + t.strokes + ' golpes'
+    : ft ? ft.me + ' míos · ' + t.strokes + ' golpes'
+    : stb ? t.strokes + ' golpes' : t.stb + ' pts';
 
   const legend = [['Eagle', 'var(--eagle)'], ['Birdie', 'var(--birdie)'], ['Par', 'var(--par)'], ['Bogey', 'var(--bogey)'], ['Doble+', 'var(--double)']];
 

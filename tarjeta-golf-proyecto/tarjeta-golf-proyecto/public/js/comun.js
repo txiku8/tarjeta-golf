@@ -197,25 +197,34 @@ function matchHoleResult(r, i, ms) {
   const a = my - ms.me[i], b = rv - ms.rival[i];
   return a < b ? 1 : a > b ? -1 : 0;
 }
-// Estado del partido. `up` > 0 = voy ganando por esos hoyos.
-// El partido se cierra cuando la ventaja es mayor que los hoyos que quedan (de ahí el "3&2").
-function matchState(r) {
-  const n = r.pars.length, ms = matchStrokes(r);
+// Estado del partido a partir de una función que da el resultado de cada hoyo (1 / −1 / 0 / null).
+// La usan igual el match play individual y el fourball (2 vs 2): el marcador se lleva igual.
+// `up` > 0 = voy/vamos ganando por esos hoyos. El partido se cierra cuando la ventaja es mayor
+// que los hoyos que quedan (de ahí el "3&2").
+function runMatchState(n, resFn) {
   const res = []; const run = [];
   let up = 0, decided = 0, closedAt = -1, closedUp = 0, closedLeft = 0;
   for (let i = 0; i < n; i++) {
-    const x = matchHoleResult(r, i, ms);
+    const x = resFn(i);
     res.push(x);
     if (x !== null) { decided++; up += x; }
     run.push(x === null ? null : up);
-    if (closedAt < 0 && x !== null && Math.abs(up) > n - (i + 1)) {
+    // El partido se cierra antes de tiempo solo si aún quedaban hoyos por jugar: ganar en el
+    // último no es "2&0", es "2 arriba".
+    if (closedAt < 0 && x !== null && n - (i + 1) > 0 && Math.abs(up) > n - (i + 1)) {
       closedAt = i; closedUp = up; closedLeft = n - (i + 1);
     }
   }
   const remaining = n - decided;
-  return { res, run, up, decided, remaining, ms,
+  return { res, run, up, decided, remaining,
     closed: closedAt >= 0, closedAt, closedUp, closedLeft,
     dormie: closedAt < 0 && up !== 0 && Math.abs(up) === remaining && remaining > 0 };
+}
+function matchState(r) {
+  const ms = matchStrokes(r);
+  const st = runMatchState(r.pars.length, i => matchHoleResult(r, i, ms));
+  st.ms = ms;
+  return st;
 }
 function matchLabel(st) { return st.up === 0 ? 'Iguales' : Math.abs(st.up) + (st.up > 0 ? ' arriba' : ' abajo'); }
 function matchShort(v) { return v === 0 ? 'AS' : Math.abs(v) + (v > 0 ? '↑' : '↓'); }
@@ -227,18 +236,117 @@ function matchFinalText(st) {
   return Math.abs(st.up) + (st.up > 0 ? ' arriba' : ' abajo');
 }
 // Una sola palabra para el marcador: Ganas / Pierdes / Empate / Sin terminar.
-function matchOutcomeWord(st) {
-  if (st.closed) return st.closedUp > 0 ? 'Ganas' : 'Pierdes';
+// `team` = true en fourball, para hablar en plural (Ganáis / Perdéis).
+function matchOutcomeWord(st, team) {
+  const w = team ? 'Ganáis' : 'Ganas', l = team ? 'Perdéis' : 'Pierdes';
+  if (st.closed) return st.closedUp > 0 ? w : l;
   if (st.remaining > 0) return st.decided ? 'Sin terminar' : '—';
-  return st.up === 0 ? 'Empate' : st.up > 0 ? 'Ganas' : 'Pierdes';
+  return st.up === 0 ? 'Empate' : st.up > 0 ? w : l;
 }
 // Frase de resultado: "Ganas 3&2" / "Pierdes por 2" / "Empate" (o el estado si sigue vivo).
-function matchVerdict(st) {
+function matchVerdict(st, team) {
   const win = st.closed ? st.closedUp > 0 : st.up > 0;
-  if (st.closed) return (win ? 'Ganas ' : 'Pierdes ') + Math.abs(st.closedUp) + '&' + st.closedLeft;
+  const w = team ? 'Ganáis ' : 'Ganas ', l = team ? 'Perdéis ' : 'Pierdes ';
+  if (st.closed) return (win ? w : l) + Math.abs(st.closedUp) + '&' + st.closedLeft;
   if (st.remaining > 0) return matchLabel(st) + (st.dormie ? ' (dormie)' : '');
   if (st.up === 0) return 'Empate';
-  return (win ? 'Ganas por ' : 'Pierdes por ') + Math.abs(st.up) + (Math.abs(st.up) === 1 ? ' hoyo' : ' hoyos');
+  return (win ? w : l) + 'por ' + Math.abs(st.up) + (Math.abs(st.up) === 1 ? ' hoyo' : ' hoyos');
+}
+
+/* ---------- Fourball (parejas: cada uno con su bola, cuenta la mejor) ----------
+   La ronda guarda un bloque `fb`:
+     { format:'match'|'stableford', partner, recvMe, recvPartner,
+       holes:[{strokes}],                       // tarjeta del compañero
+       rivals, rivalScratch, recvRivals,        // solo en match play
+       rivalHoles:[{strokes, conc}] }           // MEJOR BOLA de la pareja rival + concesiones
+   `recvX` = golpes de ventaja de cada uno en la ronda, ya con la asignación que toca:
+     · stableford (mejor bola): el 85% del hándicap de juego de cada uno;
+     · match play 2 vs 2: el 90% de la diferencia con el hándicap más bajo de los cuatro.
+   De la pareja rival solo se apunta un número por hoyo (su mejor bola), que es lo que decide
+   el hoyo; sus golpes de ventaja se reparten por stroke index como los de cualquier jugador. */
+function isFourball(r) { return !!(r && r.mode === 'fourball' && r.fb); }
+function fbIsMatch(r) { return isFourball(r) && r.fb.format === 'match'; }
+function fbIsStb(r) { return isFourball(r) && r.fb.format === 'stableford'; }
+// ¿La ronda se juega hoyo a hoyo? (match play individual o fourball match)
+function isAnyMatch(r) { return isMatch(r) || fbIsMatch(r); }
+function anyMatchState(r) { return isMatch(r) ? matchState(r) : fbIsMatch(r) ? fbMatchState(r) : null; }
+function blankFbHoles(n) { return Array.from({ length: n }, () => ({ strokes: 0 })); }
+
+// Golpes de ventaja por hoyo de cada uno: { me:[…], partner:[…], rivals:[…] }.
+function fbStrokes(r) {
+  const f = r.fb, zero = new Array(r.pars.length).fill(0);
+  const sp = v => (v > 0 ? spreadStrokes(r.pars, r.si, v) : zero.slice());
+  return { me: sp(f.recvMe || 0), partner: sp(f.recvPartner || 0), rivals: sp(f.recvRivals || 0) };
+}
+// Golpes netos de cada bola en un hoyo (null si no está apuntada).
+function fbNets(r, i, fs) {
+  fs = fs || fbStrokes(r);
+  const my = r.holes[i].strokes, pa = r.fb.holes[i].strokes;
+  return { me: my > 0 ? my - fs.me[i] : null, partner: pa > 0 ? pa - fs.partner[i] : null };
+}
+// Mejor bola de mi pareja en el hoyo: { net, who:'me'|'partner'|'both'|null }.
+function fbBest(r, i, fs) {
+  const n = fbNets(r, i, fs);
+  if (n.me === null && n.partner === null) return { net: null, who: null };
+  if (n.partner === null) return { net: n.me, who: 'me' };
+  if (n.me === null) return { net: n.partner, who: 'partner' };
+  if (n.me === n.partner) return { net: n.me, who: 'both' };
+  return n.me < n.partner ? { net: n.me, who: 'me' } : { net: n.partner, who: 'partner' };
+}
+// Resultado del hoyo en fourball match: 1 lo ganamos, −1 lo gana la pareja rival, 0 empate, null sin decidir.
+function fbHoleResult(r, i, fs) {
+  const rh = r.fb.rivalHoles && r.fb.rivalHoles[i];
+  if (!rh) return null;
+  if (rh.conc === 'me') return -1;     // concedemos el hoyo
+  if (rh.conc === 'rival') return 1;   // nos lo conceden
+  fs = fs || fbStrokes(r);
+  const mine = fbBest(r, i, fs).net;
+  const rv = rh.strokes > 0 ? rh.strokes - fs.rivals[i] : null;
+  if (mine === null || rv === null) return null;
+  return mine < rv ? 1 : mine > rv ? -1 : 0;
+}
+function fbMatchState(r) {
+  const fs = fbStrokes(r);
+  const st = runMatchState(r.pars.length, i => fbHoleResult(r, i, fs));
+  st.fs = fs;
+  return st;
+}
+// Puntos Stableford del hoyo: los míos, los del compañero y los de la pareja (el mejor de los dos).
+function fbHolePoints(r, i, fs) {
+  fs = fs || fbStrokes(r);
+  const par = r.pars[i];
+  const pt = (s, recv) => s > 0 ? Math.max(0, 2 + (par + recv) - s) : null;
+  const me = pt(r.holes[i].strokes, fs.me[i]);
+  const partner = pt(r.fb.holes[i].strokes, fs.partner[i]);
+  const team = me === null ? partner : partner === null ? me : Math.max(me, partner);
+  return { me, partner, team, who: team === null ? null : (me === partner ? 'both' : team === me ? 'me' : 'partner') };
+}
+// Totales de la pareja en fourball stableford: puntos de equipo, míos y del compañero.
+function fbTotals(r) {
+  const fs = fbStrokes(r);
+  let team = 0, me = 0, partner = 0, mineCount = 0;
+  r.pars.forEach((_, i) => {
+    const p = fbHolePoints(r, i, fs);
+    if (p.team !== null) team += p.team;
+    if (p.me !== null) me += p.me;
+    if (p.partner !== null) partner += p.partner;
+    if (p.who === 'me' || p.who === 'both') mineCount++;
+  });
+  return { team, me, partner, mineCount };
+}
+// Golpes de la mejor bola bruta de cada equipo (para el marcador de golpes en fourball match).
+function fbBallTotals(r, shown) {
+  const fs = fbStrokes(r);
+  let mine = 0, rivals = 0;
+  r.pars.forEach((_, i) => {
+    if (shown && !shown(i)) return;
+    const a = r.holes[i].strokes, b = r.fb.holes[i].strokes;
+    const best = a > 0 && b > 0 ? Math.min(a, b) : (a > 0 ? a : b > 0 ? b : 0);
+    mine += best;
+    const rh = r.fb.rivalHoles && r.fb.rivalHoles[i];
+    rivals += (rh && rh.strokes) || 0;
+  });
+  return { mine, rivals, fs };
 }
 
 /* ---------- Gráficos (offline SVG) ---------- */
