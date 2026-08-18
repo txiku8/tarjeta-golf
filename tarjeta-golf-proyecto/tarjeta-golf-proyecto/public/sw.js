@@ -7,7 +7,7 @@
    para que el HTML y el JavaScript NUNCA sean de generaciones distintas (eso
    causaba la pantalla en blanco). Al cambiar archivos, sube CACHE_VERSION: el
    nuevo worker borra la caché vieja entera y recarga la app limpia. */
-const CACHE_VERSION = 'golf-v23';
+const CACHE_VERSION = 'golf-v24';
 
 /* Esqueleto propio: se guarda de forma atómica (o todo, o nada). Todos existen. */
 const SHELL = [
