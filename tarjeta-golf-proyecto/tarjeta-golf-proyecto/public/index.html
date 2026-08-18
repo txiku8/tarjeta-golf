@@ -47,7 +47,8 @@
 <!-- ===== TAB: RENDIMIENTO ===== -->
 <main class="wrap tab hidden" id="tabRendimiento">
   <div class="screen-head"><h1>Rendimiento</h1></div>
-  <p class="sec-cap">Resumen de tus últimas 20 rondas</p>
+  <div class="rend-filters" id="rendFilters"></div>
+  <p class="sec-cap" id="rendCap"></p>
   <div class="mgrid2" id="homeStats"></div>
   <h2 class="sec" id="rendStatsSec" style="display:none">Estadísticas</h2>
   <div class="mgrid2" id="rendStats"></div>
@@ -55,6 +56,8 @@
   <div id="rendPar"></div>
   <h2 class="sec" id="rendDriveSec" style="display:none">Salida</h2>
   <div id="rendDrive"></div>
+  <h2 class="sec" id="rendHoyosSec" style="display:none">Hoyos</h2>
+  <div id="rendHoyos"></div>
   <h2 class="sec" id="progressSec" style="display:none">Progreso</h2>
   <div id="progress"></div>
 </main>
@@ -143,6 +146,17 @@
     <div class="gs-from" id="gpsDistFrom"></div>
     <button class="gs-close" id="gpsDistClose" aria-label="Cerrar">⌄</button>
   </div>
+  <div class="gps-shotdot hidden" id="gpsShotDot"></div>
+  <button class="gps-meas" id="gpsMeas">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17.5L17.5 3 21 6.5 6.5 21z"></path><path d="M8 8l2 2M11 5l2 2M5 11l2 2"></path></svg>
+    Medir golpe
+  </button>
+  <div class="gps-measbox hidden" id="gpsMeasBox">
+    <button class="mb-x" id="gpsMeasCancel" aria-label="Cancelar">✕</button>
+    <div class="mb-k" id="gpsMeasK">Camina hasta la bola</div>
+    <div class="mb-v"><b class="tnum" id="gpsMeasM">0</b><i>m</i></div>
+    <button class="mb-save" id="gpsMeasSave">Guardar</button>
+  </div>
   <div class="gps-hbar">
     <button class="hb-nav" id="gpsPrev" aria-label="Hoyo anterior">‹</button>
     <button class="hb-mid" id="gpsScoreBtn" aria-label="Apuntar resultado">
@@ -210,6 +224,7 @@
 <script defer src="js/pantalla-jugar.js"></script>
 <script defer src="js/pantalla-gps.js"></script>
 <script defer src="js/pantalla-yo.js"></script>
+<script defer src="js/compartir.js"></script>
 <script defer src="js/buscador-mapa.js"></script>
 <script defer src="js/inicio.js"></script>
 

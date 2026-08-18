@@ -186,6 +186,35 @@
   .dist-legend .dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
   .dist-legend b { color: var(--text); }
 
+  /* ===== Filtros de Rendimiento (cuántas rondas / qué campo) ===== */
+  .rend-filters { margin: 14px 0 2px; }
+  .rf-row { display: flex; gap: 8px; }
+  .rf-chip {
+    flex: 1; padding: 9px 4px; border-radius: 11px; border: 1px solid var(--line-strong);
+    background: var(--surface); color: var(--muted); font-size: 14px; font-weight: 700;
+  }
+  .rf-chip.on { background: var(--indigo); border-color: var(--indigo); color: #fff; }
+  .rf-sel {
+    width: 100%; margin-top: 8px; font: inherit; font-size: 14px; font-weight: 600; color: var(--text);
+    background: var(--surface); border: 1px solid var(--line-strong); border-radius: 11px; padding: 10px 12px;
+  }
+
+  /* ===== Hoyos (tabla por campo y ranking) ===== */
+  .sum-split.hoyos td { font-size: 15px; padding: 8px 4px; }
+  .sum-split.hoyos td.rh small { display: block; font-size: 11px; font-weight: 700; color: var(--muted); }
+  .sum-split.hoyos tr.peor td { background: color-mix(in srgb, var(--bogey) 10%, transparent); }
+  .hoyos-note { font-size: 12px; color: var(--muted); margin: 8px 4px 0; }
+  .hrow { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+  .hrow:first-of-type { border-top: none; }
+  .hrow .hno {
+    width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 9px;
+    background: var(--surface-2); color: var(--text); font-weight: 800; font-size: 14px;
+  }
+  .hrow .hnm { flex: 1; min-width: 0; line-height: 1.25; }
+  .hrow .hnm b { display: block; font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hrow .hnm small { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+  .hrow .hvs { font-size: 17px; font-weight: 800; }
+
   /* ===== Round view ===== */
   .hidden { display: none !important; }
   .round-head { display: flex; align-items: baseline; gap: 10px; margin: 18px 2px 4px; }
@@ -435,6 +464,13 @@
   .pv-row { display: flex; align-items: center; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--line); font-size: 14px; }
   .pv-row > span:first-child { width: 28px; color: var(--muted); font-weight: 700; text-align: center; }
   .pv-si { margin-left: auto; color: var(--muted); font-size: 13px; font-weight: 600; }
+  .pv-m { color: var(--indigo); font-weight: 700; font-size: 13px; }
+  .pv-tee { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .pv-tee select {
+    flex: 1; min-width: 0; font: inherit; font-size: 14px; font-weight: 600; color: var(--text);
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px;
+  }
+  .pv-tot { color: var(--muted); font-size: 12px; font-weight: 700; text-align: right; }
 
   /* ===== Tarjeta de campo grande (estilo HOLE19) ===== */
   .gcard {
@@ -501,6 +537,25 @@
   .gc-field.big .v { font-size: 24px; }
   .gc-foot { position: relative; margin-top: 14px; font-size: 11px; color: rgba(255,255,255,.6); font-weight: 600; }
 
+  /* Hándicap estimado con tus propias tarjetas (WHS) */
+  .whs-card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow); padding: 16px 18px; margin-top: 12px;
+  }
+  .whs-card .w-top { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .whs-card .w-top svg { width: 16px; height: 16px; color: var(--indigo); }
+  .whs-card .w-main { display: flex; align-items: baseline; gap: 12px; margin: 10px 0 2px; }
+  .whs-card .w-v { font-size: 40px; font-weight: 800; letter-spacing: -.03em; color: var(--indigo); line-height: 1; }
+  .whs-card .w-d { font-size: 12.5px; color: var(--muted); font-weight: 600; line-height: 1.3; }
+  .whs-card .w-diffs { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .whs-card .w-k { display: block; font-size: 10px; font-weight: 700; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--muted); }
+  .whs-card .w-list { font-size: 14px; font-weight: 700; color: var(--text); }
+  .whs-card .w-foot { margin-top: 10px; font-size: 11px; color: var(--muted); font-weight: 600; }
+  .whs-card.empty .w-empty { margin-top: 8px; font-size: 13px; color: var(--muted); font-weight: 600; line-height: 1.4; }
+  .whs-card.empty .w-empty b { color: var(--text); }
+
   /* ===== Pantalla de ronda: totales + tarjeta + editor ===== */
   .totstrip { display: flex; gap: 6px; margin: 2px 2px 12px; }
   .totstrip .ts-cell { flex: 1; text-align: center; padding: 8px 4px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
@@ -538,6 +593,7 @@
   .hole-editor .ed-meta { line-height: 1.35; }
   .hole-editor .ed-meta .par { font-size: 14px; color: var(--muted); }
   .hole-editor .ed-meta .par b { color: var(--text); }
+  .hole-editor .ed-meta .par .hm { color: var(--indigo); font-weight: 700; }
   .hole-editor .ed-meta .hdots { color: var(--indigo); font-size: 24px; line-height: 1; letter-spacing: 3px; margin-top: 3px; }
   .hole-editor .ed-meta .hcp.none { font-size: 11px; color: var(--muted); margin-top: 1px; }
   .hole-editor .gir-circle { position: absolute; left: 60%; top: 50%; transform: translate(-50%, -50%); width: 60px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 800; letter-spacing: .03em; box-shadow: var(--shadow); }
@@ -732,7 +788,10 @@
   .sum-split td { padding: 10px 6px; text-align: center; font-size: 17px; font-weight: 800; border-top: 1px solid var(--line); }
   .sum-split td.rh { font-size: 14px; color: var(--muted); font-weight: 700; }
 
-  .sum-actions { display: flex; gap: 10px; margin: 22px 0 8px; }
+  .btn.share { width: 100%; margin-top: 22px; display: flex; align-items: center; justify-content: center; gap: 9px;
+    background: var(--surface); color: var(--indigo); border: 1.5px solid var(--indigo); padding: 15px; }
+  .btn.share svg { width: 19px; height: 19px; }
+  .sum-actions { display: flex; gap: 10px; margin: 10px 0 8px; }
   .sum-actions .btn { flex: 1; padding: 15px; }
   .sum-actions .btn.ghost { flex: 1; }
 
@@ -895,6 +954,34 @@
     border: 2px solid #fff; display: grid; place-items: center; box-shadow: 0 0 0 5px rgba(47,116,224,.25), 0 2px 6px rgba(0,0,0,.5); pointer-events: none; }
   .gps-me2 svg { width: 18px; height: 18px; fill: #4d9bff; }
   .gps-aim, .gps-badge { display: none; }   /* las coloca/enseña gpsLayout() */
+
+  /* Medir un golpe: botón, punto de salida del golpe y panel con los metros en vivo */
+  .gps-shotdot { position: absolute; z-index: 3; width: 14px; height: 14px; margin: -7px 0 0 -7px;
+    border-radius: 50%; background: #ffd23f; border: 2px solid rgba(11,23,38,.8);
+    box-shadow: 0 0 0 4px rgba(255,210,63,.28), 0 1px 4px rgba(0,0,0,.6); pointer-events: none; }
+  .gps-shotdot.hidden { display: none; }
+  .gps-meas { position: absolute; z-index: 6; left: 12px; bottom: calc(env(safe-area-inset-bottom) + 92px);
+    display: flex; align-items: center; gap: 7px; padding: 10px 14px; border: none; border-radius: 22px;
+    background: rgba(11,17,26,.72); color: #fff; font-size: 13.5px; font-weight: 800; cursor: pointer;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: 0 3px 12px rgba(0,0,0,.4); }
+  .gps-meas svg { width: 16px; height: 16px; }
+  .gps-meas:active { transform: scale(.96); }
+  .gps-meas.hidden { display: none; }
+  .gps-measbox { position: absolute; z-index: 7; left: 12px; right: 12px;
+    bottom: calc(env(safe-area-inset-bottom) + 92px);
+    background: rgba(11,17,26,.86); color: #fff; border-radius: 18px; padding: 12px 16px 14px;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 6px 22px rgba(0,0,0,.5); }
+  .gps-measbox.hidden { display: none; }
+  .gps-measbox .mb-x { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border: none;
+    border-radius: 50%; background: transparent; color: rgba(255,255,255,.6); font-size: 15px; cursor: pointer; }
+  .gps-measbox .mb-k { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+    color: rgba(255,255,255,.65); }
+  .gps-measbox .mb-v { display: flex; align-items: baseline; gap: 5px; margin: 2px 0 10px; }
+  .gps-measbox .mb-v b { font-size: 46px; font-weight: 800; line-height: 1; letter-spacing: -.03em; }
+  .gps-measbox .mb-v i { font-style: normal; font-size: 15px; font-weight: 700; color: rgba(255,255,255,.6); }
+  .gps-measbox .mb-save { width: 100%; padding: 11px; border: none; border-radius: 13px;
+    background: var(--indigo); color: #fff; font-size: 15px; font-weight: 800; cursor: pointer; }
+  .gps-measbox .mb-save:active { transform: scale(.98); }
   .gps-aim { width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%;
     border: 3px solid #fff; background: rgba(255,255,255,.08); box-shadow: 0 0 0 1px rgba(0,0,0,.3), inset 0 0 12px rgba(0,0,0,.25);
     z-index: 4; cursor: grab; touch-action: none; }
@@ -933,3 +1020,13 @@
     box-shadow: 0 2px 10px rgba(91,91,230,.3); }
   .hole-editor .gps-open:active { transform: scale(.98); }
   .hole-editor .gps-open .go-ic { font-size: 17px; }
+
+  /* franja con tu histórico en ESTE hoyo */
+  .hole-editor .hhist {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px;
+    padding: 8px 12px; margin: 4px 0 10px; font-size: 12.5px; color: var(--muted);
+  }
+  .hole-editor .hhist .hh-n { font-weight: 800; color: var(--text); }
+  .hole-editor .hhist b { color: var(--text); font-weight: 800; font-size: 14px; }
+  .hole-editor .hhist i { font-style: normal; font-size: 11px; }

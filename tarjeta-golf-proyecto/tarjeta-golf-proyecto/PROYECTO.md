@@ -7,7 +7,9 @@ Contexto completo para que otra IA (o desarrollador) continúe el proyecto sin c
 App web para llevar la **tarjeta de golf**: registrar rondas hoyo a hoyo (golpes, putts, calle, penalizaciones), con estadísticas para mejorar el juego, catálogo de campos de España con buscador y mapa, gráficos de progreso y sincronización en la nube con login de Google.
 
 - **App en producción:** https://tarjeta-golf-txiku.web.app
-- **Toda la app es UN ÚNICO archivo** `index.html` (HTML + CSS + JS inline, sin build, sin dependencias npm). Se despliega tal cual.
+- **Sin build ni dependencias npm**: se despliega tal cual. El HTML va en `public/index.html`, los
+  estilos en `public/css/estilos.css` y el JavaScript repartido en un módulo por pantalla dentro de
+  `public/js/` (scripts clásicos con `defer`, ver §6). Antes era un único archivo; se partió al crecer.
 - Público objetivo: un jugador que usa el móvil en el campo (UI táctil, pensada para el pulgar, se añade a pantalla de inicio).
 - Idioma UI: español.
 
@@ -70,11 +72,17 @@ Link: https://console.firebase.google.com/project/tarjeta-golf-txiku/authenticat
 ## 4. Modelo de datos
 
 ### En memoria / localStorage
-- `courses`: `[{ id, name, loc, pars: number[18|9], lat, lon }]`
-  - `pars` = par de cada hoyo. `loc` = "Localidad · Provincia". `lat/lon` opcionales (para el mini-mapa).
-- `rounds`: `[{ id, courseId, courseName, courseLoc, pars: number[], date: ISO, holes, saved:true }]`
-  - `holes`: `[{ strokes, putts, fir: 'hit'|'left'|'right'|null, pen }]` por hoyo.
-  - Cada ronda guarda su **propia copia de `pars`** (foto del día): editar un campo no altera rondas pasadas.
+- `courses`: `[{ id, name, loc, pars: number[18|9], si, lat, lon }]`
+  - `pars` = par de cada hoyo, `si` = stroke index. `loc` = "Localidad · Provincia". `lat/lon` opcionales (para el mini-mapa).
+- `rounds`: `[{ id, courseId, courseName, courseLoc, pars, si, mts, date: ISO, holes, saved:true, … }]`
+  - `holes`: `[{ strokes, putts, fir: 'hit'|'left'|'right'|null, pen, bunker, drive }]` por hoyo.
+    `drive` = metros de la salida medidos con el GPS (0 = sin medir).
+  - `mts` = metros de cada hoyo desde la barra jugada; `barra`, `sr`, `cr` = barra, slope y course
+    rating (los necesita el hándicap WHS); `hcp`/`hcpIndex` = golpes de juego e índice exacto;
+    `holeStart` = nº del primer hoyo (para las vueltas 10-18); `mode` + bloques `match` / `fb`.
+  - Cada ronda guarda su **propia copia de `pars`/`si`/`mts`** (foto del día): editar un campo no altera rondas pasadas.
+- `profile`: índice, barra y hándicap recordados, nombres de rival/compañero y los filtros de
+  Rendimiento (`rendN`, `rendCourse`). Solo local, no se sincroniza.
 - `active`: ronda en curso (borrador). **Solo local**, NO se sincroniza (es específica del dispositivo).
 - Claves localStorage: `golf_courses_v1`, `golf_rounds_v1`, `golf_active_v1`.
 
@@ -93,17 +101,39 @@ Link: https://console.firebase.google.com/project/tarjeta-golf-txiku/authenticat
 - **Ver demo con datos:** botón en el login que carga 4 campos + 10 rondas simuladas (tendencia de mejora) en modo local, para enseñar la app.
 - **Arranque siempre en Inicio**; si hay ronda a medias, aviso "Ronda en curso" (Continuar/Descartar).
 - **Export/Import JSON** y "Borrar todo" en el menú `···`.
+- **Modalidades:** Medal, Stableford, match play uno contra uno y fourball (match 2 vs 2 o mejor
+  bola), con el reparto de golpes de la RFEG/WHS (95 % individual, 90 % de la diferencia en fourball
+  match, 85 % en mejor bola) y concesiones de hoyo.
+- **Metros de cada hoyo** desde la barra jugada (editor, GPS, vista previa, tarjeta).
+- **Histórico por hoyo**: veces jugado, media, mejor y última, mientras juegas ese hoyo.
+- **Hándicap WHS estimado** con tus propias tarjetas (diferenciales con tope de doble bogey neto).
+- **Medir el golpe con el GPS**: marca dónde pegas, camina a la bola y guarda la salida en metros.
+- **Pantalla siempre encendida** durante la ronda y el mapa (Wake Lock).
+- **Compartir la tarjeta** como imagen PNG dibujada en un canvas (`navigator.share`).
+- **PWA**: `manifest.json` + service worker con app-shell atómico → abre sin cobertura.
 
-## 6. Estructura del código (dentro de `index.html`)
+## 6. Estructura del código (`public/js/`, un módulo por pantalla)
 
-Un solo `<script>` clásico. Bloques principales (buscar por comentarios `/* ---------- ... */`):
-- Estado nube (FB_CONFIG, CLOUD_ENABLED, `scheduleCloudPush`).
-- Catálogo (`GOLF_CATALOG`), `norm`, `SPAIN_MAP` (datos del mapa + proyección), `parLayout`.
-- Helpers de scoring (`isGir`, `scoreColor`, `roundTotals`, `fmtVsPar`).
-- Mini-mapa (`projectPt`, `courseMiniMap`, `courseCoords`).
-- Gráficos (`svgLine`, `renderProgress`).
-- HOME (`renderHome`), Rondas (`startRound`, `openRound`, `holeCard`, ...), Finder (`openFinder`, `buildMap`, `renderFinder`), Modal de campo (`openCourseModal`), Menú (export/import/reset), Datos de ejemplo (`loadDemo`).
-- Auth + sync (`initCloud`, `subscribeCloud`, `startApp`) y boot.
+Scripts clásicos con `defer`, cargados **en este orden** (todo vive en el ámbito global, sin imports):
+
+| Archivo | Qué hay dentro |
+| --- | --- |
+| `nucleo.js` | `$`, `el`, `uid`, `LS`, `load`/`save`, FB_CONFIG, `CLOUD_ENABLED`, `scheduleCloudPush` |
+| `datos.js` | `GOLF_CATALOG` (404 campos), `norm`, `SPAIN_MAP` |
+| `gps-datos.js` | `GPS_GREENS` (salida/frente/centro/fondo de 99 campos), `gpsHolesFor` |
+| `comun.js` | `mtile`/`sicon`, scoring (`isGir`, `roundTotals`, `stableford`), match play y fourball, metros (`roundMetres`), histórico (`holeHistory`, `holeAggregate`), hándicap WHS (`roundDifferential`, `whsIndex`), `keepAwake`, gráficos SVG y mini-mapa |
+| `navegacion.js` | pestañas, geolocalización, tarjeta de campo, **configurar ronda** (`openRoundConfig`), vista previa |
+| `pantalla-historial.js` | lista de rondas con deslizar-para-borrar |
+| `pantalla-rendimiento.js` | filtros, estadísticas agregadas, por par, salida y hoyos |
+| `pantalla-jugar.js` | campos cercanos, ronda (tarjeta + editor de hoyo), resumen, tarjeta apaisada |
+| `pantalla-gps.js` | mapa del hoyo, distancias y medición del golpe |
+| `pantalla-yo.js` | perfil, ficha RFEG, hándicap estimado, exportar/importar |
+| `compartir.js` | dibuja la tarjeta en un canvas y la comparte (`shareRound`) |
+| `buscador-mapa.js` | `esc`/`fmtDate`/`toast`, buscador de campos y mapa Leaflet |
+| `inicio.js` | auth + sincronización (`initCloud`, `subscribeCloud`, `startApp`) y arranque |
+
+⚠️ Al añadir o quitar un módulo hay que tocarlo en **`index.html`**, en la lista `SHELL` de
+**`sw.js`** y subir **`CACHE_VERSION`** (si no, quien tenga la app instalada seguirá con la copia vieja).
 
 `SPAIN_MAP` contiene: `viewBox`, `canaryBox`, `maxCount`, `provs:[{prov,ck,n,d}]` (path SVG por provincia), y `proj`/`canaryProj` (constantes de proyección lon/lat→SVG) + `canaryKeys`.
 
@@ -139,16 +169,22 @@ firebase deploy --only firestore:rules,hosting --project tarjeta-golf-txiku
 
 ## 9. Limitaciones conocidas / próximos pasos
 
-- **Par hoyo a hoyo** del catálogo es una **plantilla** que suma el par total real, NO el layout oficial de cada campo (no existe en fuentes abiertas para ~400 campos). Editable por el usuario. Falta el **stroke index** (índice de dificultad por hoyo).
+- **Par, stroke index y metros** son ya los **reales** de los 404 campos de softline.golf (por barra en el caso de los metros). Editables por el usuario.
 - **Precisión de coordenadas** variable: ~250 a nivel de campo (golf), el resto a nivel de pueblo (centroide).
-- **Offline al ABRIR sin red**: hoy el dato es offline (caché Firestore), pero abrir la app cerrada sin conexión requeriría convertirla en **PWA** (manifest + service worker que cachee el shell y el SDK). Pendiente si se quiere offline total.
+- **GPS del hoyo** solo en los 99 campos de `gps-datos.js`; en el resto no aparece el mapa.
+- **Hándicap WHS**: solo entran vueltas de **18 hoyos** con la barra apuntada (el WHS combina las de
+  9 de dos en dos, que no está implementado). Es un cálculo propio, no sustituye al oficial de la RFEG.
 - **Maps/gráficos** son SVG propios (sin tiles externos), así funcionan en cualquier hosting sin depender de proveedores de mapas.
 - **Login en móvil** usa popup; si algún navegador lo bloquea, cambiar a `signInWithRedirect`.
 - Sincronización: se guarda el documento completo del usuario (merge). Tamaño holgado para el límite de 1 MB por documento de Firestore.
 
 ## 10. Ideas de mejora
-- PWA offline completa (service worker).
-- Stableford, scrambling/sand saves, up&down.
-- Vista de detalle de ronda con perfil hoyo a hoyo.
+Hechas: PWA offline, Stableford, scrambling/sand saves, detalle de ronda hoyo a hoyo, stroke index
+real, metros por barra, hándicap WHS, medir la salida, compartir la tarjeta.
+
+Pendientes:
+- Unificar la iconografía (aún conviven emoji y los SVG de `sicon()`).
+- Legibilidad a pleno sol: más contraste en `--muted` y tamaño mínimo de texto mayor.
+- Diferencial de vueltas de 9 hoyos para el hándicap.
+- Campos de 9 hoyos en el catálogo (softline solo trae tarjetas de 18).
 - Zoom del mapa por región / marcadores por campo.
-- Stroke index real por campo (si se consigue fuente).

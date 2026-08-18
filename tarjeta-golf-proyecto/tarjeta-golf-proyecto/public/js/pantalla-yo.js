@@ -20,6 +20,7 @@ function renderYo() {
   box.appendChild(hero);
 
   renderPlayerCard(box, name);
+  renderWhsCard(box);
 
   const list = el('div', 'yo-list');
   const mk = (label, ico, cls) => {
@@ -62,6 +63,39 @@ function renderYo() {
     localStorage.clear(); location.reload();
   };
   if (bOut) bOut.onclick = () => firebase.auth().signOut();
+}
+
+/* Hándicap estimado con TUS rondas, según el sistema mundial (WHS): de cada vuelta de 18
+   hoyos sale un diferencial y el índice es la media de los mejores de las últimas 20. No
+   sustituye al hándicap oficial de la RFEG (solo cuentan las vueltas presentadas en el club),
+   pero enseña hacia dónde va antes de que la federación lo publique. */
+function renderWhsCard(box) {
+  const w = whsIndex();
+  const card = el('div', 'whs-card');
+  box.appendChild(card);
+  if (w.index == null) {
+    const faltan = Math.max(0, 3 - w.n);
+    card.classList.add('empty');
+    card.innerHTML = `<div class="w-top">${sicon('chart')} Hándicap estimado</div>
+      <div class="w-empty">Necesita al menos 3 vueltas de 18 hoyos con la barra apuntada.
+        ${w.n ? 'Llevas <b>' + w.n + '</b>: te falta' + (faltan === 1 ? '' : 'n') + ' <b>' + faltan + '</b>.' : 'Aún no hay ninguna.'}</div>`;
+    return;
+  }
+  const ord = [...w.diffs].sort((a, b) => a - b).slice(0, w.used);
+  const detalle = w.n >= 20
+    ? 'media de los 8 mejores diferenciales de tus últimas 20 rondas'
+    : `media de ${w.used === 1 ? 'tu mejor diferencial' : 'tus ' + w.used + ' mejores diferenciales'} de ${w.n} ronda${w.n === 1 ? '' : 's'}`;
+  card.innerHTML = `
+    <div class="w-top">${sicon('chart')} Hándicap estimado</div>
+    <div class="w-main">
+      <div class="w-v tnum">${fmtIndex(w.index)}</div>
+      <div class="w-d">${detalle}</div>
+    </div>
+    <div class="w-diffs">
+      <span class="w-k">Diferenciales que cuentan</span>
+      <span class="w-list tnum">${ord.map(d => fmtIndex(d)).join(' · ')}</span>
+    </div>
+    <div class="w-foot">Cálculo propio con tus tarjetas · el oficial es el de la RFEG</div>`;
 }
 
 /* Ficha de jugador: nº de licencia y hándicap RFEG (leído solo, se actualiza tras jugar).

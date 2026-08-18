@@ -18,6 +18,8 @@ let gpsAim = null;          // [lat,lon] de la mira arrastrable (punto a medir)
 let gpsDrag = null;         // {dx,dy} desplazamiento dedo→mira mientras se arrastra
 let gpsAccM = null;         // precisión del último fix, en metros
 let gpsDistOn = false;      // panel grande de distancias abierto
+let gpsShotFrom = null;     // [lat,lon] desde donde se dio el golpe que se está midiendo
+let gpsShotTee = false;     // ese golpe salió de la salida → es el drive del hoyo
 const V = {};               // parámetros de proyección/vista ACTUALES (animados)
 
 const MPD_LAT = 111320;     // metros por grado de latitud
@@ -57,13 +59,18 @@ function openGps() {
   if (!gpsHoles) { toast('Este campo todavía no tiene GPS'); return; }
   gpsN = holeNo(selHole);
   $('#viewGps').classList.remove('hidden');
+  keepAwake(true);   // el mapa se mira andando: la pantalla no debe apagarse
   $('#gpsClose').onclick = closeGps;
   $('#gpsPrev').onclick = () => gpsGoHole(-1);
   $('#gpsNext').onclick = () => gpsGoHole(1);
   $('#gpsScoreBtn').onclick = gpsOpenScore;
   $('#gpsGreen').onclick = gpsToggleDist;
   $('#gpsDistClose').onclick = gpsCloseDist;
+  $('#gpsMeas').onclick = gpsStartShot;
+  $('#gpsMeasCancel').onclick = gpsCancelShot;
+  $('#gpsMeasSave').onclick = gpsSaveShot;
   gpsDistOn = false; $('#gpsDist').classList.add('hidden');
+  gpsCancelShot();
   gpsLoadHole();
   gpsStartWatch();
   const stage = $('#viewGps');
@@ -118,6 +125,45 @@ function gpsPintaDist(g, origin, jugando) {
   $('#gpsAccTxt').textContent = txt;
 }
 
+/* --- Medir un golpe: marcas dónde has pegado, andas hasta la bola y te dice cuánto has mandado.
+   Si el golpe salió de la salida (a menos de TEE_R metros), se guarda como la SALIDA del hoyo y
+   entra en la media de tus salidas. Los demás golpes se miden pero no se guardan: la tarjeta no
+   lleva la cuenta golpe a golpe. */
+const SHOT_TEE_R = 45;    // m alrededor de la salida para considerar que el golpe es el drive
+function gpsStartShot() {
+  if (!gpsUserRaw) { toast('Esperando a que el GPS te sitúe'); return; }
+  const h = gpsHoles[gpsN];
+  gpsShotFrom = gpsUserRaw.slice();
+  // vale tanto la salida real como la de juego (V.ftee), que es la que se pinta
+  gpsShotTee = !!h && Math.min(gpsM(gpsShotFrom, h.t), V.ftee ? gpsM(gpsShotFrom, V.ftee) : 1e9) <= SHOT_TEE_R;
+  $('#gpsMeas').classList.add('hidden');
+  $('#gpsMeasBox').classList.remove('hidden');
+  $('#gpsMeasK').textContent = gpsShotTee ? 'Salida · camina hasta la bola' : 'Camina hasta la bola';
+  $('#gpsMeasSave').textContent = gpsShotTee ? 'Guardar como salida' : 'Hecho';
+  gpsLayout();
+}
+function gpsCancelShot() {
+  gpsShotFrom = null; gpsShotTee = false;
+  $('#gpsMeas').classList.remove('hidden');
+  $('#gpsMeasBox').classList.add('hidden');
+  $('#gpsShotDot').classList.add('hidden');
+}
+function gpsShotM() {
+  const now = gpsUserView || gpsUserRaw;
+  return (gpsShotFrom && now) ? gpsM(gpsShotFrom, now) : 0;
+}
+function gpsSaveShot() {
+  const m = gpsShotM(), tee = gpsShotTee;
+  if (tee && m > 0) {
+    const i = gpsHoleIdx();
+    if (active.holes[i]) { active.holes[i].drive = m; markDirty(); }
+    toast('Salida de ' + m + ' m guardada');
+  } else {
+    toast(m > 0 ? 'Golpe de ' + m + ' m' : 'No te has movido del sitio');
+  }
+  gpsCancelShot();
+}
+
 // Pulsar la barra de abajo: cierra el mapa y abre la pantalla de apuntar (tarjeta/editor) en ESTE hoyo.
 function gpsOpenScore() {
   selHole = gpsHoleIdx();
@@ -131,6 +177,7 @@ function gpsGoHole(d) {
   const n = Math.max(first, Math.min(last, gpsN + d));
   if (n === gpsN) return;
   gpsN = n;
+  gpsCancelShot();   // la medición era de ESE hoyo
   gpsLoadHole();
 }
 
@@ -143,7 +190,10 @@ function gpsOnResize() {
 // Geometría del hoyo + descarga de la foto aérea; al cargar, encuadra y pinta.
 function gpsLoadHole() {
   const h = gpsHoles[gpsN];
-  const meta = 'PAR ' + (active.pars[gpsHoleIdx()] || '') + (active.si && active.si[gpsHoleIdx()] ? ' · SI ' + active.si[gpsHoleIdx()] : '');
+  const idx = gpsHoleIdx(), mts = holeMetres(active, idx);
+  const meta = 'PAR ' + (active.pars[idx] || '')
+    + (mts ? ' · ' + mts + ' M' : '')
+    + (active.si && active.si[idx] ? ' · SI ' + active.si[idx] : '');
   $('#gpsHbNo').textContent = gpsN;
   $('#gpsHbMeta').textContent = meta;
   $('#gpsPrev').disabled = gpsN <= (active.holeStart || 1);
@@ -244,7 +294,7 @@ function gpsResetAim() {
 }
 function gpsAimDown(e) {
   if (!gpsAim || !V.scale) return;
-  if (e.target.closest('.gps-hbar, .gps-x, .gps-green, .gps-sheet')) return;   // botones y paneles
+  if (e.target.closest('.gps-hbar, .gps-x, .gps-green, .gps-sheet, .gps-meas, .gps-measbox')) return;   // botones y paneles
   const r = $('#viewGps').getBoundingClientRect();
   const x = e.clientX - r.left, y = e.clientY - r.top;
   const p = gpsProject(gpsAim[0], gpsAim[1]);
@@ -326,6 +376,15 @@ function gpsLayout() {
   const me = $('#gpsMe');
   if (playing) { const pm = gpsProject(gpsUserView[0], gpsUserView[1]); me.style.display = 'block'; me.style.left = pm.x + 'px'; me.style.top = pm.y + 'px'; }
   else me.style.display = 'none';
+
+  // Golpe que se está midiendo: punto donde se pegó + metros recorridos hasta ahora.
+  const shot = $('#gpsShotDot');
+  if (gpsShotFrom) {
+    const ps = gpsProject(gpsShotFrom[0], gpsShotFrom[1]);
+    shot.classList.remove('hidden');
+    shot.style.left = ps.x + 'px'; shot.style.top = ps.y + 'px';
+    $('#gpsMeasM').textContent = gpsShotM();
+  } else shot.classList.add('hidden');
 
   // Línea desde tu posición (o la salida) hasta la mira, y de la mira al green (a trazos).
   const po = gpsProject(origin[0], origin[1]);

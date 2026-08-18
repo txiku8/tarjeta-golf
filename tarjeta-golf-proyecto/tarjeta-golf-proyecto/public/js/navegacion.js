@@ -115,7 +115,8 @@ function catalogToCourse(c) {
     name: c.n, loc: (c.t ? c.t + ' · ' : '') + c.p,
     pars: (c.pars && c.pars.length ? [...c.pars] : parLayout(c.h, c.par)),
     si: c.si && c.si.length ? [...c.si] : null, lat: c.lat, lon: c.lon,
-    par: c.par || 0, tees: c.tees || null, // par total del campo + barras [nombre, slope, rating]
+    // par total del campo + barras [nombre, slope, rating, metros por hoyo] + metros de la 1ª barra
+    par: c.par || 0, tees: c.tees || null, metros: c.metros || null,
   };
 }
 function playCatalog(c) { openRoundConfig(catalogToCourse(c)); }
@@ -139,7 +140,10 @@ function openRoundConfig(course) {
     if (j < 0) j = tees.findIndex(t => { const n = norm(t[0]); return n.includes('amarill') && n.includes('caballero'); });
     if (j >= 0) teeIdx = j;
   }
-  const savedIndex = profile.index != null ? profile.index : ''; // number input: punto decimal
+  // Índice de salida: el que usaste la última vez y, si nunca has puesto ninguno, el que sale
+  // de tus propias tarjetas (WHS estimado). Siempre editable.
+  const estimado = profile.index == null ? whsIndex().index : null;
+  const savedIndex = profile.index != null ? profile.index : (estimado != null ? estimado : ''); // number input: punto decimal
   const savedHcp = profile.hcp != null ? profile.hcp : '';
   const bg = el('div', 'modal-bg rc-bg');
   bg.innerHTML = `
@@ -413,10 +417,12 @@ function openRoundConfig(course) {
     const hraw = $('#rcHcp').value.trim();
     const hcp = hraw === '' ? null : Math.max(0, Math.min(54, Math.round(parseFloat(hraw.replace(',', '.')) || 0)));
     let index = null, barra = null;
+    // Barra jugada: da los metros de cada hoyo y el slope/rating que necesita el hándicap WHS.
+    const tee = tees ? curTee() : null;
     if (tees) {
       const iraw = $('#rcIndex').value.trim();
       index = iraw === '' ? null : parseFloat(iraw.replace(',', '.'));
-      barra = curTee()[0];
+      barra = tee[0];
       profile.index = index; profile.barra = barra;
     } else {
       profile.hcp = hcp;
@@ -461,7 +467,9 @@ function openRoundConfig(course) {
     }
     save(LS.profile, profile); // recuerda índice/barra (o golpes), el rival y la pareja para la próxima
     close();
-    startRound(course, { range: holesSel.value, mode, hcp, index, barra, match, fb });
+    startRound(course, { range: holesSel.value, mode, hcp, index, barra, match, fb,
+      mts: (tee && tee[3]) || course.metros || null,   // metros de cada hoyo desde ESA barra
+      sr: tee ? tee[1] : null, cr: tee ? tee[2] : null, coursePar: par });
   };
 }
 
@@ -471,22 +479,36 @@ function openCoursePreview(c) {
   const totPar = cc.pars.reduce((a, b) => a + b, 0);
   const km = distToCoords(c.lat != null ? { lat: c.lat, lon: c.lon } : null);
   const hasMap = c.lat != null && c.lon != null;
-  const rows = cc.pars.map((p, i) =>
-    `<div class="pv-row"><span class="tnum">${i + 1}</span><span>Par <b class="tnum">${p}</b></span>` +
-    `<span class="pv-si">${cc.si && cc.si[i] ? 'Índice ' + cc.si[i] : ''}</span></div>`).join('');
+  // Barras con metros por hoyo: se puede cambiar para ver la longitud desde cada salida.
+  const tees = (cc.tees || []).filter(t => t[3] && t[3].length === cc.pars.length);
   const bg = el('div', 'modal-bg');
   bg.innerHTML = `
     <div class="modal" role="dialog">
       ${hasMap ? `<div id="pvMap" style="height:150px;border-radius:14px;overflow:hidden;margin-bottom:14px;border:1px solid var(--line);background:var(--surface-2)"></div>` : ''}
       <h3 style="margin-bottom:4px">${esc(cc.name)}</h3>
       <p style="margin:0 0 14px;color:var(--muted);font-size:14px">${esc(cc.loc)}${km != null ? ' · ' + fmtKm(km) : ''} · ${cc.pars.length} hoyos · Par ${totPar}</p>
-      <div class="pv-list">${rows}</div>
+      ${tees.length ? `<div class="pv-tee">
+        <select id="pvTee">${tees.map((t, i) => `<option value="${i}">${esc(t[0])}</option>`).join('')}</select>
+        <span class="pv-tot tnum" id="pvTot"></span>
+      </div>` : ''}
+      <div class="pv-list" id="pvList"></div>
       <div class="modal-actions" style="margin-top:16px">
         <button class="btn ghost" id="pvClose">Cerrar</button>
         <button class="btn" id="pvPlay">Jugar al golf</button>
       </div>
     </div>`;
   document.body.appendChild(bg);
+  const paintPv = () => {
+    const t = tees.length ? tees[+$('#pvTee').value] : null;
+    const mts = t ? t[3] : null;
+    $('#pvList').innerHTML = cc.pars.map((p, i) =>
+      `<div class="pv-row"><span class="tnum">${i + 1}</span><span>Par <b class="tnum">${p}</b></span>` +
+      `${mts ? `<span class="pv-m tnum">${mts[i]} m</span>` : ''}` +
+      `<span class="pv-si">${cc.si && cc.si[i] ? 'Índice ' + cc.si[i] : ''}</span></div>`).join('');
+    if (mts) $('#pvTot').textContent = mts.reduce((a, b) => a + b, 0) + ' m · slope ' + t[1] + ' · rating ' + fmtHcp(t[2]);
+  };
+  if (tees.length) $('#pvTee').onchange = paintPv;
+  paintPv();
   if (hasMap) $('#pvMap').innerHTML = courseMiniMap(c.p, c.lat, c.lon);
   const close = () => bg.remove();
   bg.onclick = e => { if (e.target === bg) close(); };

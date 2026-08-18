@@ -37,7 +37,8 @@ function renderNearby() {
 }
 
 /* ---------- Rounds ---------- */
-function blankHoles(n) { return Array.from({ length: n }, () => ({ strokes: 0, putts: 0, fir: null, pen: 0, bunker: false })); }
+// `drive` = metros de la salida, medidos con el GPS (0 = sin medir).
+function blankHoles(n) { return Array.from({ length: n }, () => ({ strokes: 0, putts: 0, fir: null, pen: 0, bunker: false, drive: 0 })); }
 
 function startRound(course, opts) {
   if (active && active.dirty) {
@@ -51,9 +52,16 @@ function startRound(course, opts) {
   else if (opts.range === 'back' && nH >= 18) { from = 9; to = 18; }
   const pars = course.pars.slice(from, to);
   const si = course.si ? course.si.slice(from, to) : null;
+  // Metros de cada hoyo desde la barra jugada (mismo recorte que pars/si).
+  const allMts = opts.mts && opts.mts.length === nH ? opts.mts : null;
+  const mts = allMts ? allMts.slice(from, to) : null;
   active = {
     id: uid(), courseId: course.id, courseName: course.name, courseLoc: course.loc,
-    pars, si, date: new Date().toISOString(),
+    pars, si, mts, date: new Date().toISOString(),
+    // slope y rating de la barra + par total del campo: los necesita el hándicap WHS
+    sr: opts.sr != null ? opts.sr : null,
+    cr: opts.cr != null ? opts.cr : null,
+    coursePar: opts.coursePar != null ? opts.coursePar : null,
     holeStart: from + 1, // nº del primer hoyo (para numerar 10-18 correctamente)
     mode: opts.mode || 'medal',
     // Match play: bloque del rival con su propia tarjeta de golpes por hoyo.
@@ -84,14 +92,17 @@ function openRound() {
   const appHeader = document.querySelector('header.app'); if (appHeader) appHeader.classList.add('hidden');
   $('#viewRound').classList.remove('hidden');
   $('#roundBar').classList.remove('hidden');
+  keepAwake(true);   // jugando, que no se apague la pantalla entre golpe y golpe
   $('#rTitle').textContent = active.courseName;
   $('#viewRound').classList.toggle('match', isMatch(active));
   $('#viewRound').classList.toggle('fourball', isFourball(active));
   const hcpLbl = isMatch(active) ? matchSubLabel(active)
     : isFourball(active) ? fbSubLabel(active)
     : (active.hcp != null ? ' · ' + active.hcp + ' golpes' + (active.barra ? ' (' + active.barra + ')' : '') : '');
+  const mAll = roundMetres(active);
+  const mLbl = mAll ? ' · ' + mAll.reduce((a, b) => a + b, 0) + ' m' : '';
   $('#rSub').textContent = (active.courseLoc ? active.courseLoc + ' · ' : '') + fmtDate(active.date) +
-    ' · ' + active.pars.length + ' hoyos · ' + modeName(active) + hcpLbl;
+    ' · ' + active.pars.length + ' hoyos' + mLbl + ' · ' + modeName(active) + hcpLbl;
   // hoyo activo del editor: el primero sin apuntar, o el primero
   const firstEmpty = active.holes.findIndex((h, i) => !holeHasData(i));
   selHole = firstEmpty >= 0 ? firstEmpty : 0;
@@ -102,6 +113,7 @@ function openRound() {
   window.scrollTo(0, 0);
 }
 function closeRound(toTab) {
+  keepAwake(false);
   $('#viewRound').classList.add('hidden');
   $('#roundBar').classList.add('hidden');
   $('#roundSheet').classList.add('hidden'); $('#roundSheet').classList.remove('open');
@@ -380,6 +392,20 @@ function scoreRightHtml(i, recv) {
 }
 function updateGir() { const el = $('#girBadge'); if (el) el.className = girClass(selHole); }
 
+// Franja con lo que has hecho OTRAS veces en este mismo hoyo del campo. Solo aparece si ya
+// lo has jugado antes; el color de la media dice si es un hoyo que se te da bien o mal.
+function holeHistHtml(i) {
+  const hh = holeHistory(active.courseName, holeNo(i), active.id);
+  if (!hh) return '';
+  const avg = hh.avg.toFixed(1).replace('.', ',');
+  return `<div class="hhist">
+    <span class="hh-n">${hh.n} vez${hh.n === 1 ? '' : 'es'} aquí</span>
+    <span class="hh-i">media <b class="tnum" style="color:${vsColor(hh.avgVs)}">${avg}</b> <i>${fmtAvgVs(hh.avgVs)}</i></span>
+    <span class="hh-i">mejor <b class="tnum">${hh.best}</b></span>
+    <span class="hh-i">última <b class="tnum">${hh.last}</b></span>
+  </div>`;
+}
+
 // Mini-selector deslizable (estilo Golpes, tamaño reducido) para putts y penalizaciones.
 function miniPickerHtml(id, min, max) {
   let s = '';
@@ -416,6 +442,7 @@ function renderEditor() {
   const fs = fbq ? fbStrokes(active) : null;
   const r = mp ? ms.me[i] : fbq ? fs.me[i] : recv[i];
   const dots = ((stb || mp || fbq) && r > 0) ? `<div class="hdots" title="${r} golpe(s) que da el hándicap aquí">${'•'.repeat(r)}</div>` : '';
+  const mts = holeMetres(active, i);   // longitud del hoyo desde la barra jugada
   const meta2 = (!stb && active.si && active.si[i]) ? `<div class="hcp none">índice ${active.si[i]}</div>` : '';
   const par3 = par <= 3;
   const calleHtml = `
@@ -475,10 +502,11 @@ function renderEditor() {
   $('#holeEditor').innerHTML = `
     <div class="ed-head">
       <div class="ed-no"><div class="lab">Hoyo</div><div class="n tnum">${holeNo(i)}</div></div>
-      <div class="ed-meta"><div class="par"><b>Par ${par}</b></div>${dots}${meta2}</div>
+      <div class="ed-meta"><div class="par"><b>Par ${par}</b>${mts ? ` · <span class="hm tnum">${mts} m</span>` : ''}</div>${dots}${meta2}</div>
       <div class="${girClass(i)}" id="girBadge" title="Green en regulación">GIR</div>
       <div class="ed-score">${scoreRightHtml(i, recv)}</div>
     </div>
+    ${holeHistHtml(i)}
     ${gpsAvailable() ? '<button class="gps-open" id="btnGps"><span class="go-ic">📍</span> Ver mapa GPS del hoyo</button>' : ''}
     <div class="pick-lab">Golpes</div>
     <div class="hpick-wrap"><div class="hpick-sel"></div><div class="hpick" id="hpick">${nums.join('')}</div></div>
@@ -721,6 +749,7 @@ function saveRound() {
    tocar una ronda del historial. Única diferencia: el botón de la derecha es
    "Hecho" al terminar y "Atrás" cuando se entra desde el historial. */
 function showRoundSummary(r, fromHistory) {
+  keepAwake(false);   // se acabó la ronda: la pantalla vuelve a apagarse sola
   document.querySelectorAll('main.tab').forEach(m => m.classList.add('hidden')); // oculta la pestaña activa (p. ej. Historial)
   $('#viewRound').classList.add('hidden');
   $('#roundBar').classList.add('hidden');
@@ -880,6 +909,8 @@ function renderSummary(r, fromHistory) {
       ${mtile('Bunkers', t.sandPoss ? t.sandPct + '%' : '—', t.sandPoss ? t.sand + ' / ' + t.sandPoss : 'ninguno', 'bunker', t.sandPoss ? 'var(--warn)' : mut)}
       ${mtile('Penaliz.', t.pen, 'golpes', 'warn', t.pen ? 'var(--bad)' : mut)}
       ${mtile('Mejor hoyo', bestI >= 0 ? 'H' + hno(bestI) : '—', bestLbl, 'flag', best !== null ? vsColor(best) : mut)}
+      ${t.driveN ? mtile('Salida media', t.driveAvg + ' m',
+        t.driveN + (t.driveN === 1 ? ' medida' : ' medidas') + ' · máx ' + t.driveMax + ' m', 'target', 'var(--indigo)') : ''}
     </div>
 
     ${showSplit ? `
@@ -889,11 +920,16 @@ function renderSummary(r, fromHistory) {
       <tbody>${splitRow('Ida (OUT)', out)}${splitRow('Vuelta (IN)', inn)}</tbody>
     </table>` : ''}
 
+    <button class="btn share" id="sumShare">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"></path><polyline points="8 8 12 4 16 8"></polyline><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"></path></svg>
+      Compartir tarjeta
+    </button>
     <div class="sum-actions">
       <button class="btn ghost" id="sumCard">Ver tarjeta</button>
       <button class="btn" id="sumDone">${fromHistory ? 'Atrás' : 'Hecho'}</button>
     </div>`;
 
+  $('#sumShare').onclick = () => shareRound(r);
   $('#sumCard').onclick = () => showRoundCard(r, () => $('#viewSummary').classList.remove('hidden'));
   $('#sumDone').onclick = () => closeSummary('historial');
 }
@@ -979,6 +1015,12 @@ function renderRoundCard(r) {
     i => `<td class="tnum">${r.pars[i]}</td>`,
     sumOver(frontIdx, i => r.pars[i]), sumOver(backIdx, i => r.pars[i]), sumOver(idxs, i => r.pars[i]))}</tr>`;
 
+  // Longitud de cada hoyo desde la barra jugada (si el campo la trae).
+  const mtsArr = roundMetres(r);
+  const mtsRow = !mtsArr ? '' : `<tr class="tk-min"><td class="tk-rh">Metros</td>${assemble(
+    i => `<td class="tnum">${mtsArr[i]}</td>`,
+    sumOver(frontIdx, i => mtsArr[i]), sumOver(backIdx, i => mtsArr[i]), sumOver(idxs, i => mtsArr[i]))}</tr>`;
+
   const mst = anyMatchState(r);
   const team = isFourball(r);
   const fbFs = team ? fbStrokes(r) : null;
@@ -1056,7 +1098,7 @@ function renderRoundCard(r) {
     <div class="tk-table-wrap">
       <table class="tk-grid">
         <thead><tr>${head}</tr></thead>
-        <tbody>${parRow}${goRow}${mRows}${puttRow}${ptsRow}</tbody>
+        <tbody>${parRow}${mtsRow}${goRow}${mRows}${puttRow}${ptsRow}</tbody>
       </table>
     </div>
     <div class="tk-legend">${legend.map(l => `<span><i style="background:${l[1]}"></i>${l[0]}</span>`).join('')}</div>`;

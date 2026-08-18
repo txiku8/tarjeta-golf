@@ -109,9 +109,11 @@ function fmtVsPar(n) { return n === 0 ? 'E' : n > 0 ? '+' + n : String(n); }
 /* ---------- Aggregate stats ---------- */
 function roundTotals(r) {
   let strokes = 0, putts = 0, par = 0, played = 0, firHit = 0, firPoss = 0, gir = 0, girPoss = 0, pen = 0;
-  let scr = 0, scrPoss = 0, girPutts = 0, sand = 0, sandPoss = 0;
+  let scr = 0, scrPoss = 0, girPutts = 0, sand = 0, sandPoss = 0, driveSum = 0, driveN = 0, driveMax = 0;
   r.holes.forEach((h, i) => {
     const p = r.pars[i];
+    // Salidas medidas con el GPS (solo las que se midieron): media y la más larga.
+    if (h.drive > 0) { driveN++; driveSum += h.drive; if (h.drive > driveMax) driveMax = h.drive; }
     if (h.strokes > 0) {
       played++; strokes += h.strokes; putts += h.putts; par += p; pen += h.pen || 0;
       girPoss++;
@@ -131,6 +133,7 @@ function roundTotals(r) {
   });
   return { strokes, putts, par, played, vsPar: strokes - par,
     firHit, firPoss, gir, girPoss, pen, scr, scrPoss, girPutts, sand, sandPoss,
+    driveN, driveMax, driveAvg: driveN ? Math.round(driveSum / driveN) : 0,
     stb: stablefordPoints(r),
     firPct: firPoss ? Math.round(firHit / firPoss * 100) : 0,
     girPct: girPoss ? Math.round(gir / girPoss * 100) : 0,
@@ -165,6 +168,138 @@ function stablefordPoints(r) {
   });
   return pts;
 }
+
+/* ---------- Longitud de los hoyos (metros por barra) ----------
+   El catálogo guarda los metros de cada hoyo DENTRO de cada barra: tees = [nombre, slope,
+   rating, [metros]]. La ronda se lleva su copia (`mts`) recortada al rango jugado, igual que
+   `pars`. Las rondas guardadas antes de existir esto no la tienen: se recupera del catálogo
+   cruzando por nombre de campo y barra jugada. */
+function roundMetres(r) {
+  if (!r) return null;
+  if (r.mts && r.mts.length === r.pars.length) return r.mts;
+  const cat = GOLF_CATALOG.find(x => x.n === r.courseName);
+  if (!cat || !cat.tees) return null;
+  const tee = (r.barra && cat.tees.find(t => t[0] === r.barra)) || cat.tees[0];
+  const all = tee && tee[3];
+  if (!all) return null;
+  const from = (r.holeStart || 1) - 1;
+  const m = all.slice(from, from + r.pars.length);
+  return m.length === r.pars.length ? m : null;
+}
+function holeMetres(r, i) { const m = roundMetres(r); return m ? m[i] : null; }
+
+/* ---------- Histórico de un hoyo ----------
+   Cómo has jugado ANTES este hoyo de este campo. Cruza por nombre de campo y número de hoyo
+   (holeStart + índice), así una vuelta a los nueve últimos cuenta en los hoyos 10-18. Solo
+   entran hoyos con golpes apuntados; `exclId` deja fuera la ronda en curso. */
+function holeHistory(courseName, hNo, exclId) {
+  const list = [];
+  rounds.forEach(r => {
+    if (r.courseName !== courseName || r.id === exclId) return;
+    const i = hNo - (r.holeStart || 1);
+    const h = r.holes[i];
+    if (!h || !h.strokes) return;
+    list.push({ strokes: h.strokes, par: r.pars[i], putts: h.putts || 0 });
+  });
+  if (!list.length) return null;
+  const n = list.length;
+  const str = list.reduce((a, x) => a + x.strokes, 0);
+  const par = list.reduce((a, x) => a + x.par, 0);
+  return { n, avg: str / n, avgVs: (str - par) / n, best: Math.min(...list.map(x => x.strokes)), last: list[0].strokes };
+}
+
+// Agrupa los hoyos de una lista de rondas por campo + número de hoyo. Devuelve una fila por
+// hoyo con las veces jugado, la media, la media sobre el par, el mejor resultado y los putts.
+function holeAggregate(list) {
+  const m = new Map();
+  list.forEach(r => r.holes.forEach((h, i) => {
+    if (!h.strokes) return;
+    const no = (r.holeStart || 1) + i;
+    const key = r.courseName + '|' + no;
+    let e = m.get(key);
+    if (!e) e = m.set(key, { course: r.courseName, no, par: r.pars[i], mts: null, n: 0, str: 0, parSum: 0, putts: 0, best: Infinity }).get(key);
+    e.n++; e.str += h.strokes; e.parSum += r.pars[i]; e.putts += h.putts || 0;
+    if (h.strokes < e.best) e.best = h.strokes;
+    if (e.mts == null) e.mts = holeMetres(r, i);
+  }));
+  return [...m.values()].map(e => Object.assign(e, { avg: e.str / e.n, avgVs: (e.str - e.parSum) / e.n }));
+}
+
+/* ---------- Hándicap WHS estimado ----------
+   Diferencial de una ronda:  (113 / slope) × (golpes ajustados − course rating).
+   "Ajustados" = con el tope de DOBLE BOGEY NETO por hoyo (par + 2 + los golpes que te da el
+   hándicap ahí), que es lo que manda el WHS para que un hoyo desastroso no dispare el
+   diferencial; los hoyos no jugados cuentan como par neto y hacen falta 14 como mínimo.
+   El índice es la media de los N mejores diferenciales de las últimas 20 rondas, con la tabla
+   oficial para cuando hay menos de 20. Solo entran rondas de 18 hoyos: las de 9 se combinan de
+   dos en dos en el WHS y eso ya no sería el mismo cálculo. */
+const WHS_MIN_HOLES = 14;
+// nº de rondas → [cuántos diferenciales se promedian, ajuste que se suma]
+const WHS_TABLE = { 3: [1, -2], 4: [1, -1], 5: [1, 0], 6: [2, -1], 7: [2, 0], 8: [2, 0],
+  9: [3, 0], 10: [3, 0], 11: [3, 0], 12: [4, 0], 13: [4, 0], 14: [4, 0], 15: [5, 0], 16: [5, 0],
+  17: [6, 0], 18: [6, 0], 19: [7, 0], 20: [8, 0] };
+
+// Slope y course rating de la barra jugada: de la propia ronda o, si es antigua, del catálogo.
+function roundSlopeRating(r) {
+  if (r.sr > 0 && r.cr > 0) return { sr: r.sr, cr: r.cr };
+  const cat = GOLF_CATALOG.find(x => x.n === r.courseName);
+  if (!cat || !cat.tees || !cat.tees.length) return null;
+  const tee = (r.barra && cat.tees.find(t => t[0] === r.barra)) || null;
+  return tee ? { sr: tee[1], cr: tee[2] } : null;   // sin barra guardada no se adivina
+}
+// Golpes con el tope de doble bogey neto; los hoyos sin apuntar valen par neto.
+function adjustedGross(r) {
+  const recv = golfStrokesReceived(r);
+  let tot = 0, played = 0;
+  r.holes.forEach((h, i) => {
+    const cap = r.pars[i] + 2 + recv[i];
+    if (h.strokes > 0) { played++; tot += Math.min(h.strokes, cap); }
+    else tot += r.pars[i] + recv[i];      // hoyo no jugado = par neto
+  });
+  return { tot, played };
+}
+// Diferencial de la ronda (1 decimal), o null si no se puede calcular.
+function roundDifferential(r) {
+  if (!r || r.pars.length < 18) return null;
+  const t = roundSlopeRating(r);
+  if (!t || !(t.sr > 0)) return null;
+  const g = adjustedGross(r);
+  if (g.played < WHS_MIN_HOLES) return null;
+  return Math.round((113 / t.sr) * (g.tot - t.cr) * 10) / 10;
+}
+// Índice a partir de una lista de diferenciales ordenada de MÁS RECIENTE a más antigua.
+function whsFromDiffs(diffs) {
+  const last = diffs.slice(0, 20);
+  const rule = WHS_TABLE[last.length];
+  if (!rule) return null;                 // menos de 3 rondas válidas: aún no hay índice
+  const [k, adj] = rule;
+  const best = [...last].sort((a, b) => a - b).slice(0, k);
+  const avg = best.reduce((a, b) => a + b, 0) / k;
+  return Math.round((avg + adj) * 10) / 10;
+}
+// Índice actual + de dónde sale. `list` por defecto son todas las rondas (recientes primero).
+function whsIndex(list) {
+  const src = list || rounds;
+  const diffs = [];
+  for (const r of src) { const d = roundDifferential(r); if (d != null) diffs.push(d); }
+  const idx = whsFromDiffs(diffs);
+  const used = diffs.length ? (WHS_TABLE[Math.min(diffs.length, 20)] || [0])[0] : 0;
+  return { index: idx, n: diffs.length, used, diffs, best: diffs.length ? Math.min(...diffs) : null };
+}
+// Evolución del índice: cómo habría quedado tras cada ronda válida (antiguo → reciente).
+function whsHistory() {
+  const chrono = [];
+  for (let i = rounds.length - 1; i >= 0; i--) { const d = roundDifferential(rounds[i]); if (d != null) chrono.push(d); }
+  const out = [];
+  for (let i = 0; i < chrono.length; i++) {
+    // los diferenciales hasta esa ronda, con el más reciente delante
+    const v = whsFromDiffs(chrono.slice(0, i + 1).reverse());
+    if (v != null) out.push(v);
+  }
+  return out;
+}
+// El hándicap se escribe "14,6"; por debajo de scratch lleva delante un + ("+2,3").
+function fmtIndex(v) { return v == null ? '—' : (v < 0 ? '+' : '') + Math.abs(v).toFixed(1).replace('.', ','); }
 
 /* ---------- Match play (uno contra uno) ----------
    La ronda guarda un bloque `match`:
@@ -349,6 +484,30 @@ function fbBallTotals(r, shown) {
   return { mine, rivals, fs };
 }
 
+/* ---------- Pantalla siempre encendida ----------
+   Jugando, el móvil se apaga solo entre golpe y golpe y hay que desbloquearlo cada vez. Con
+   la ronda o el mapa GPS abiertos se pide un wake lock; al salir se suelta para no gastar
+   batería. El sistema lo quita al irse la app a segundo plano, así que se vuelve a pedir al
+   volver. Donde el navegador no lo soporte (iOS antiguo) no pasa nada: no hace nada. */
+let wakeLock = null, wakeWanted = false;
+async function keepAwake(on) {
+  wakeWanted = !!on;
+  if (!('wakeLock' in navigator)) return;
+  try {
+    if (wakeWanted) {
+      if (!wakeLock) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      }
+    } else if (wakeLock) {
+      const w = wakeLock; wakeLock = null; await w.release();
+    }
+  } catch (_) { wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => {
+  if (wakeWanted && document.visibilityState === 'visible' && !wakeLock) keepAwake(true);
+});
+
 /* ---------- Gráficos (offline SVG) ---------- */
 function svgLine(vals, opts) {
   opts = opts || {};
@@ -419,9 +578,10 @@ function courseCoords(c) {
   return (lat != null && lon != null) ? { lat, lon, prov } : null;
 }
 
-function renderProgress() {
+// `list` = rondas ya filtradas por la pantalla de Rendimiento (por defecto, todas).
+function renderProgress(list) {
   const box = $('#progress'), sec = $('#progressSec');
-  const done = rounds.filter(r => roundTotals(r).played > 0);
+  const done = (list || rounds).filter(r => roundTotals(r).played > 0);
   if (!done.length) { sec.style.display = 'none'; box.innerHTML = ''; return; }
   sec.style.display = '';
   const chrono = [...done].reverse(); // antiguo -> reciente
@@ -436,7 +596,20 @@ function renderProgress() {
   const segs = [['Eagle', dist.eagle, 'var(--eagle)'], ['Birdie', dist.birdie, 'var(--birdie)'], ['Par', dist.par, 'var(--par)'], ['Bogey', dist.bogey, 'var(--bogey)'], ['Doble+', dist.double, 'var(--double)']];
   const tot = segs.reduce((a, s) => a + s[1], 0) || 1;
 
+  // Evolución del hándicap: SIEMPRE con todas las rondas de 18 hoyos, aunque arriba haya un
+  // filtro puesto — el índice sale de tu juego entero, no del campo que estés mirando.
+  const hcpHist = whsHistory();
+  const wi = whsIndex();
+  const hcpCard = hcpHist.length < 2 ? '' : `
+    <div class="prog-card">
+      <div class="prog-head"><span class="prog-title">Hándicap estimado</span>
+        <span class="prog-cur tnum">${fmtIndex(wi.index)}</span></div>
+      ${svgLine(hcpHist, { id: 'hc', color: 'var(--indigo)' })}
+      <div class="prog-sub">${wi.n} ronda${wi.n === 1 ? '' : 's'} de 18 hoyos · mejor ${fmtIndex(Math.min(...hcpHist))}</div>
+    </div>`;
+
   box.innerHTML = `
+    ${hcpCard}
     <div class="prog-card">
       <div class="prog-head"><span class="prog-title">Evolución vs par</span>
         <span class="prog-cur tnum" style="color:${vspar[vspar.length-1] < 0 ? 'var(--birdie)' : vspar[vspar.length-1] > 0 ? 'var(--bogey)' : 'var(--text)'}">${fmtVsPar(vspar[vspar.length-1])}</span></div>
